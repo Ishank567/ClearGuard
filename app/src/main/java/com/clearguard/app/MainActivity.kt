@@ -40,6 +40,10 @@ import androidx.compose.ui.unit.sp
 import com.clearguard.app.blocking.HostBlocker
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardHero
+import com.clearguard.app.ui.screens.BlocklistsScreen
+import com.clearguard.app.ui.screens.DashboardScreen
+import com.clearguard.app.ui.screens.SettingsScreen
+import com.clearguard.app.ui.screens.StatisticsScreen
 import com.clearguard.app.ui.theme.ClearColors
 import com.clearguard.app.ui.theme.ClearGuardTheme
 import com.clearguard.app.vpn.ClearGuardVpnService
