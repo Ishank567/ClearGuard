@@ -7,16 +7,16 @@ import java.util.Map;
 final class DnsResponseCache {
     private static final int MAX_ENTRIES = 512;
 
-    private final LinkedHashMap<String, Entry> cache =
-            new LinkedHashMap<String, Entry>(MAX_ENTRIES, 0.75f, true) {
+    private final LinkedHashMap<String, CacheEntry> cache =
+            new LinkedHashMap<String, CacheEntry>(MAX_ENTRIES, 0.75f, true) {
                 @Override
-                protected boolean removeEldestEntry(Map.Entry<String, Entry> eldest) {
+                protected boolean removeEldestEntry(Map.Entry<String, CacheEntry> eldest) {
                     return size() > MAX_ENTRIES;
                 }
             };
 
     synchronized byte[] get(String key, int transactionId) {
-        Entry entry = cache.get(key);
+        CacheEntry entry = cache.get(key);
         if (entry == null) {
             return null;
         }
@@ -35,18 +35,18 @@ final class DnsResponseCache {
             return;
         }
         long expiresAt = System.currentTimeMillis() + Math.min(ttlSeconds, 900) * 1000L;
-        cache.put(key, new Entry(Arrays.copyOf(payload, payload.length), expiresAt));
+        cache.put(key, new CacheEntry(Arrays.copyOf(payload, payload.length), expiresAt));
     }
 
     synchronized void clear() {
         cache.clear();
     }
 
-    private static final class Entry {
+    private static final class CacheEntry {
         final byte[] payload;
         final long expiresAtMillis;
 
-        Entry(byte[] payload, long expiresAtMillis) {
+        CacheEntry(byte[] payload, long expiresAtMillis) {
             this.payload = payload;
             this.expiresAtMillis = expiresAtMillis;
         }
