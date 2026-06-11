@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">ClearGuard</string>
+    <string name="protection_active">Protection Active</string>
+    <string name="protection_paused">Protection Paused</string>
+    <string name="blocked_today">Blocked Today</string>
+    <string name="total_blocked">Total Blocked</string>
+</resources>

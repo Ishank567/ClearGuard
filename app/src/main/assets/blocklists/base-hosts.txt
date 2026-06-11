@@ -1,0 +1,13 @@
+# Small built-in starter list. Use Update Blocklists in the app for broad coverage.
+0.0.0.0 doubleclick.net
+0.0.0.0 googleadservices.com
+0.0.0.0 googlesyndication.com
+0.0.0.0 pagead2.googlesyndication.com
+0.0.0.0 adservice.google.com
+0.0.0.0 ads.facebook.com
+0.0.0.0 connect.facebook.net
+0.0.0.0 analytics.google.com
+0.0.0.0 google-analytics.com
+0.0.0.0 scorecardresearch.com
+0.0.0.0 adnxs.com
+0.0.0.0 adsrvr.org

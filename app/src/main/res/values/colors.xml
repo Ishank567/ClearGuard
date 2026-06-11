@@ -1,0 +1,9 @@
+<resources>
+    <color name="clear_bg">#F7F8FA</color>
+    <color name="clear_panel">#FFFFFF</color>
+    <color name="clear_text">#17202A</color>
+    <color name="clear_muted">#5E6B78</color>
+    <color name="clear_green">#167A52</color>
+    <color name="clear_blue">#1E5EFF</color>
+    <color name="clear_border">#D9E0E8</color>
+</resources>
