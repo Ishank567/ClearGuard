@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.clearguard.app.blocking.HostBlocker
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardHero
+import com.clearguard.app.ui.screens.ActivityScreen
 import com.clearguard.app.ui.screens.BlocklistsScreen
 import com.clearguard.app.ui.screens.DashboardScreen
 import com.clearguard.app.ui.screens.SettingsScreen
@@ -52,6 +53,7 @@ import kotlinx.coroutines.isActive
 
 enum class AppScreen(val title: String, val icon: ImageVector) {
     Dashboard("Home", Icons.Default.Shield),
+    Activity("Activity", Icons.Default.History),
     Statistics("Stats", Icons.Default.BarChart),
     Blocklists("Lists", Icons.Default.List),
     Settings("Settings", Icons.Default.Settings)
@@ -84,8 +86,17 @@ fun ClearGuardApp() {
     // Real state synced with the VPN service + live updates via broadcast
     var isProtected by remember { mutableStateOf(ClearGuardVpnService.isRunning()) }
     val blockedTodayState = remember { mutableStateOf(loadBlockedToday(context)) }
-    val totalBlockedState = remember { mutableStateOf(loadBlockedTotal(context)) }
+    val blockedTotalState = remember { mutableStateOf(loadBlockedTotal(context)) }
+    val allowedTotalState = remember { mutableStateOf(loadAllowedTotal(context)) }
     val activeRulesState = remember { mutableStateOf(loadActiveRules(context)) }
+    val cacheHitState = remember { mutableStateOf(loadCacheHits(context)) }
+    val scamBlockedState = remember { mutableStateOf(loadScamBlocked(context)) }
+    val scamBlockedTodayState = remember { mutableStateOf(loadScamBlockedToday(context)) }
+    val scamShieldEnabledState = remember { mutableStateOf(loadScamShieldEnabled(context)) }
+    val upstreamQueryState = remember { mutableStateOf(loadUpstreamQueries(context)) }
+    val upstreamLatencyState = remember { mutableStateOf(loadUpstreamAverageLatency(context)) }
+    val dohEnabledState = remember { mutableStateOf(loadDohEnabled(context)) }
+    val dohQueryState = remember { mutableStateOf(loadDohQueries(context)) }
 
     // Listen for live stats updates from the VPN service (makes increments very visible)
     DisposableEffect(Unit) {
@@ -93,8 +104,17 @@ fun ClearGuardApp() {
             override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
                 if (intent?.action == ClearGuardVpnService.ACTION_STATS_CHANGED) {
                     blockedTodayState.value = loadBlockedToday(context)
-                    totalBlockedState.value = loadBlockedTotal(context)
+                    blockedTotalState.value = loadBlockedTotal(context)
+                    allowedTotalState.value = loadAllowedTotal(context)
                     activeRulesState.value = loadActiveRules(context)
+                    cacheHitState.value = loadCacheHits(context)
+                    scamBlockedState.value = loadScamBlocked(context)
+                    scamBlockedTodayState.value = loadScamBlockedToday(context)
+                    scamShieldEnabledState.value = loadScamShieldEnabled(context)
+                    upstreamQueryState.value = loadUpstreamQueries(context)
+                    upstreamLatencyState.value = loadUpstreamAverageLatency(context)
+                    dohEnabledState.value = loadDohEnabled(context)
+                    dohQueryState.value = loadDohQueries(context)
                 }
             }
         }
@@ -145,8 +165,17 @@ fun ClearGuardApp() {
         while (isActive) {
             isProtected = ClearGuardVpnService.isRunning()
             blockedTodayState.value = loadBlockedToday(context)
-            totalBlockedState.value = loadBlockedTotal(context)
+            blockedTotalState.value = loadBlockedTotal(context)
+            allowedTotalState.value = loadAllowedTotal(context)
             activeRulesState.value = loadActiveRules(context)
+            cacheHitState.value = loadCacheHits(context)
+            scamBlockedState.value = loadScamBlocked(context)
+            scamBlockedTodayState.value = loadScamBlockedToday(context)
+            scamShieldEnabledState.value = loadScamShieldEnabled(context)
+            upstreamQueryState.value = loadUpstreamQueries(context)
+            upstreamLatencyState.value = loadUpstreamAverageLatency(context)
+            dohEnabledState.value = loadDohEnabled(context)
+            dohQueryState.value = loadDohQueries(context)
             delay(if (isProtected) 3000L else 8000L)
         }
     }
@@ -180,16 +209,44 @@ fun ClearGuardApp() {
                         isProtected = isProtected,
                         onToggleProtection = toggleProtection,
                         blockedToday = blockedTodayState.value.toInt(),
-                        totalBlocked = activeRulesState.value
+                        totalBlocked = activeRulesState.value,
+                        cacheHits = cacheHitState.value,
+                        upstreamQueries = upstreamQueryState.value,
+                        scamShieldEnabled = scamShieldEnabledState.value,
+                        scamBlockedToday = scamBlockedTodayState.value,
+                        dohEnabled = dohEnabledState.value
                     )
+                    AppScreen.Activity -> ActivityScreen(isProtected = isProtected)
                     AppScreen.Statistics -> StatisticsScreen(
-                        blockedToday = blockedTodayState.value.toInt(),
-                        totalBlocked = totalBlockedState.value.toInt()
+                        blockedTotal = blockedTotalState.value,
+                        allowedTotal = allowedTotalState.value,
+                        blockedToday = blockedTodayState.value,
+                        cacheHits = cacheHitState.value,
+                        upstreamQueries = upstreamQueryState.value,
+                        upstreamAverageLatencyMs = upstreamLatencyState.value,
+                        scamBlocked = scamBlockedState.value,
+                        scamShieldEnabled = scamShieldEnabledState.value,
+                        dohEnabled = dohEnabledState.value,
+                        dohQueries = dohQueryState.value
                     )
                     AppScreen.Blocklists -> BlocklistsScreen()
                     AppScreen.Settings -> SettingsScreen(
                         isProtected = isProtected,
-                        onProtectionChange = toggleProtection
+                        onProtectionChange = toggleProtection,
+                        scamShieldEnabled = scamShieldEnabledState.value,
+                        onScamShieldChange = { enabled ->
+                            PreferenceKeys.prefs(context).edit()
+                                .putBoolean(PreferenceKeys.KEY_SCAM_SHIELD_ENABLED, enabled)
+                                .apply()
+                            scamShieldEnabledState.value = enabled
+                        },
+                        dohEnabled = dohEnabledState.value,
+                        onDohEnabledChange = { enabled ->
+                            PreferenceKeys.prefs(context).edit()
+                                .putBoolean(PreferenceKeys.KEY_DOH_ENABLED, enabled)
+                                .apply()
+                            dohEnabledState.value = enabled
+                        }
                     )
                 }
             }
@@ -206,7 +263,58 @@ private fun loadBlockedToday(context: android.content.Context): Long {
 
 private fun loadBlockedTotal(context: android.content.Context): Long {
     val prefs: SharedPreferences = PreferenceKeys.prefs(context)
+    return prefs.getLong(PreferenceKeys.KEY_BLOCKED_COUNT, 0L)
+}
+
+private fun loadAllowedTotal(context: android.content.Context): Long {
+    val prefs: SharedPreferences = PreferenceKeys.prefs(context)
     return prefs.getLong(PreferenceKeys.KEY_ALLOWED_COUNT, 0L)
+}
+
+private fun loadCacheHits(context: android.content.Context): Long {
+    val prefs: SharedPreferences = PreferenceKeys.prefs(context)
+    return prefs.getLong(PreferenceKeys.KEY_CACHE_HIT_COUNT, 0L)
+}
+
+private fun loadScamBlocked(context: android.content.Context): Long {
+    val prefs: SharedPreferences = PreferenceKeys.prefs(context)
+    return prefs.getLong(PreferenceKeys.KEY_SCAM_BLOCKED_COUNT, 0L)
+}
+
+private fun loadScamBlockedToday(context: android.content.Context): Long {
+    val prefs: SharedPreferences = PreferenceKeys.prefs(context)
+    return prefs.getLong(PreferenceKeys.KEY_SCAM_BLOCKED_TODAY, 0L)
+}
+
+private fun loadScamShieldEnabled(context: android.content.Context): Boolean {
+    val prefs: SharedPreferences = PreferenceKeys.prefs(context)
+    return prefs.getBoolean(
+        PreferenceKeys.KEY_SCAM_SHIELD_ENABLED,
+        PreferenceKeys.DEFAULT_SCAM_SHIELD_ENABLED
+    )
+}
+
+private fun loadUpstreamQueries(context: android.content.Context): Long {
+    val prefs: SharedPreferences = PreferenceKeys.prefs(context)
+    return prefs.getLong(PreferenceKeys.KEY_UPSTREAM_QUERY_COUNT, 0L)
+}
+
+private fun loadUpstreamAverageLatency(context: android.content.Context): Float {
+    val prefs: SharedPreferences = PreferenceKeys.prefs(context)
+    return prefs.getFloat(PreferenceKeys.KEY_UPSTREAM_AVERAGE_LATENCY_MS, 0f)
+}
+
+private fun loadDohEnabled(context: android.content.Context): Boolean {
+    val prefs: SharedPreferences = PreferenceKeys.prefs(context)
+    return prefs.getBoolean(
+        PreferenceKeys.KEY_DOH_ENABLED,
+        PreferenceKeys.DEFAULT_DOH_ENABLED
+    )
+}
+
+private fun loadDohQueries(context: android.content.Context): Long {
+    val prefs: SharedPreferences = PreferenceKeys.prefs(context)
+    return prefs.getLong(PreferenceKeys.KEY_DOH_QUERY_COUNT, 0L)
 }
 
 private fun loadActiveRules(context: android.content.Context): Int {

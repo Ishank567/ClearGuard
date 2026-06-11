@@ -8,8 +8,13 @@ ClearGuard is designed to be transparent and local-first.
 - Aggregate allowed DNS query count.
 - Custom blocked domains.
 - Custom allowed domains.
+- Filter source URLs you add.
 - Downloaded host blocklist file.
 - In-memory DNS response cache.
+
+ClearGuard keeps a short list of the most recently blocked domains so you can review and
+allowlist them from the Activity screen. This list is held in memory only, is capped at a small
+fixed size, and is cleared whenever protection stops. It is never written to disk.
 
 ClearGuard does not store per-domain browsing history.
 

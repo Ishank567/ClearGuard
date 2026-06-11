@@ -71,6 +71,14 @@ public final class HostBlocker {
         return containsDomain(blockedHosts, normalized);
     }
 
+    public boolean isAllowed(String domain) {
+        String normalized = normalizeDomain(domain);
+        if (normalized == null) {
+            return false;
+        }
+        return containsDomain(allowedHosts, normalized);
+    }
+
     public Snapshot snapshot() {
         return new Snapshot(blockedHosts.size(), allowedHosts.size());
     }

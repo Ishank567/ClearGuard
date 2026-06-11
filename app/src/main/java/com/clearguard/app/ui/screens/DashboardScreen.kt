@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardHero
+import com.clearguard.app.ui.components.LiquidGlassIconButton
 import com.clearguard.app.ui.theme.ClearColors
 
 @Composable
@@ -30,7 +31,12 @@ fun DashboardScreen(
     isProtected: Boolean,
     onToggleProtection: (Boolean) -> Unit,
     blockedToday: Int,
-    totalBlocked: Int
+    totalBlocked: Int,
+    cacheHits: Long,
+    upstreamQueries: Long,
+    scamShieldEnabled: Boolean,
+    scamBlockedToday: Long,
+    dohEnabled: Boolean
 ) {
     val animatedBlockedToday by animateIntAsState(
         targetValue = blockedToday,
@@ -74,28 +80,20 @@ fun DashboardScreen(
                                 ClearColors.green.copy(alpha = 0.15f)
                             else
                                 ClearColors.muted.copy(alpha = 0.12f)
-                        )
-                        .clickable { onToggleProtection(!isProtected) },
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Inner glass circle (depth)
-                    GlassCard(
-                        modifier = Modifier.size(94.dp),
-                        cornerRadius = 47.dp,
-                        glassAlpha = if (isProtected) 0.88f else 0.65f,
-                        elevation = if (isProtected) 22.dp else 10.dp
+                    LiquidGlassIconButton(
+                        onClick = { onToggleProtection(!isProtected) },
+                        accent = if (isProtected) ClearColors.green else ClearColors.muted,
+                        contentColor = if (isProtected) ClearColors.green else ClearColors.muted,
+                        size = 94.dp
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PowerSettingsNew,
-                                contentDescription = "Protection",
-                                tint = if (isProtected) ClearColors.green else ClearColors.muted,
-                                modifier = Modifier.size(46.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.PowerSettingsNew,
+                            contentDescription = "Protection",
+                            modifier = Modifier.size(46.dp)
+                        )
                     }
                 }
 
@@ -139,14 +137,14 @@ fun DashboardScreen(
         ) {
             StatGlassCard(
                 modifier = Modifier.weight(1f),
-                label = "VPN Route",
-                value = "DNS",
+                label = "Threat Blocks",
+                value = if (scamShieldEnabled) formatCompact(scamBlockedToday) else "Off",
                 accent = ClearColors.green
             )
             StatGlassCard(
                 modifier = Modifier.weight(1f),
-                label = "Updates",
-                value = "Manual",
+                label = "Cache Shield",
+                value = cacheEfficiency(cacheHits, upstreamQueries),
                 accent = ClearColors.blue
             )
         }
@@ -167,6 +165,8 @@ fun DashboardScreen(
                 )
                 Spacer(Modifier.height(12.dp))
                 StatusRow("DNS Filtering", if (isProtected) "Active" else "Paused")
+                StatusRow("Threat Shield", if (scamShieldEnabled) "On-device (scam + DGA)" else "Off")
+                StatusRow("Secure DNS", if (dohEnabled) "DoH encrypted" else "Classic (plaintext)")
                 StatusRow("Traffic Route", "DNS only")
                 StatusRow("Telemetry", "None")
                 StatusRow("Background Jobs", "None")
@@ -231,5 +231,21 @@ private fun formatLargeNumber(num: Int): String {
         num >= 1_000_000 -> String.format("%.1fM", num / 1_000_000f)
         num >= 10_000 -> "${num / 1000}k"
         else -> num.toString()
+    }
+}
+
+private fun cacheEfficiency(cacheHits: Long, upstreamQueries: Long): String {
+    val total = cacheHits + upstreamQueries
+    if (total <= 0L) {
+        return "Learning"
+    }
+    return String.format("%.0f%%", (cacheHits * 100f) / total)
+}
+
+private fun formatCompact(value: Long): String {
+    return when {
+        value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000f)
+        value >= 10_000 -> "${value / 1000}k"
+        else -> value.toString()
     }
 }
