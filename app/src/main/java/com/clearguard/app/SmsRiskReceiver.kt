@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 /**
  * BroadcastReceiver for incoming SMS to enable true "incoming" tagging with Mobile Number Risk Scoring (FRI).
  * On high risk, adds to local FRI DB, logs, and can trigger notification or other actions.
- * Requires RECEIVE_SMS and READ_SMS permissions (added to manifest).
+ * Requires the RECEIVE_SMS permission (declared in the manifest).
  * This provides the "tag high-risk senders before transaction" for real SMS (vs just scanner screenshots).
  *
  * Realtime usecase method: Uses goAsync() + coroutine to support the full suspend MobileRiskScoringApi.queryRisk

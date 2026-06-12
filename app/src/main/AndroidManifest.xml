@@ -8,7 +8,6 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- For true incoming SMS tagging with Mobile Risk Scoring (FRI) -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <uses-permission android:name="android.permission.READ_SMS" />
 
     <!-- Needed to list launchable apps for the per-app exclusion picker. -->
     <queries>

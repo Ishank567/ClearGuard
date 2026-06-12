@@ -38,6 +38,12 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon
 
+      # Compile-checks the minified release config (ProGuard/R8 rules) so a
+      # broken rule is caught here instead of at release time. The APK is
+      # unsigned and not published.
+      - name: Verify release build
+        run: gradle :app:assembleRelease --no-daemon
+
       - name: Prepare APK
         run: |
           mkdir -p release
