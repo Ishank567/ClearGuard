@@ -953,3 +953,11 @@ private fun loadLaunchableApps(context: Context): List<Pair<String, String>> {
         .sortedBy { it.second.lowercase() }
         .toList()
 }
+
+private data class Provider(
+    val id: String,
+    val label: String,
+    val url: String,
+    val desc: String
+)
+
