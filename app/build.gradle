@@ -82,7 +82,6 @@ dependencies {
 
     // On-device rule engine + small TFLite model for phishing classification
     implementation libs.tensorflow.lite
-    implementation libs.tensorflow.lite.support
 
     debugImplementation libs.androidx.compose.ui.tooling
     debugImplementation libs.androidx.compose.ui.test.manifest

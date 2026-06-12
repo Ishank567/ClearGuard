@@ -3,9 +3,11 @@ package com.clearguard.app.security
 import android.content.Context
 import android.util.Log
 import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.support.common.FileUtil
+import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.MappedByteBuffer
+import java.nio.channels.FileChannel
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -35,7 +37,7 @@ object PhishingClassifier {
     fun initialize(context: Context) {
         if (initialized.get()) return
         try {
-            val model = FileUtil.loadMappedFile(context, MODEL_FILE)
+            val model = loadMappedAsset(context, MODEL_FILE)
             val options = Interpreter.Options().apply {
                 setNumThreads(2)           // small model, 2 threads is plenty
                 setUseNNAPI(true)          // use NNAPI on supported devices (faster)
@@ -49,6 +51,15 @@ object PhishingClassifier {
         }
         initialized.set(true)
     }
+
+    // Memory-maps an asset for the TFLite Interpreter. Requires the asset to be
+    // stored uncompressed; AAPT never compresses .tflite files.
+    private fun loadMappedAsset(context: Context, fileName: String): MappedByteBuffer =
+        context.assets.openFd(fileName).use { fd ->
+            FileInputStream(fd.fileDescriptor).channel.use { channel ->
+                channel.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
+            }
+        }
 
     /**
      * Extract a small deterministic feature vector from text + optional URL.
