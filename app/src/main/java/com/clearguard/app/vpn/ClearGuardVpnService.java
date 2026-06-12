@@ -51,6 +51,11 @@ public final class ClearGuardVpnService extends VpnService {
     private static final int NOTIFICATION_ID = 31;
     private static final String VPN_ADDRESS = "10.64.0.2";
     private static final String VIRTUAL_DNS = "10.64.0.1";
+    // ULA (fd00::/8) addresses for dual-stack interception. Without an IPv6 DNS
+    // route, dual-stack networks hand apps an IPv6 resolver that bypasses
+    // filtering entirely.
+    private static final String VPN_ADDRESS6 = "fd00:6440:6440:6440::2";
+    private static final String VIRTUAL_DNS6 = "fd00:6440:6440:6440::1";
 
     private static final int RECENT_QUERIES_MAX = 100;
     private static final java.util.ArrayDeque<BlockedQuery> RECENT_QUERIES = new java.util.ArrayDeque<>();
@@ -271,6 +276,14 @@ public final class ClearGuardVpnService extends VpnService {
                     .addRoute(VIRTUAL_DNS, 32)
                     .setBlocking(true)
                     .setConfigureIntent(buildConfigureIntent());
+
+            try {
+                builder.addAddress(VPN_ADDRESS6, 64)
+                        .addDnsServer(VIRTUAL_DNS6)
+                        .addRoute(VIRTUAL_DNS6, 128);
+            } catch (IllegalArgumentException ignored) {
+                // Device or OEM build without IPv6 tun support: continue IPv4-only.
+            }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 builder.setMetered(false);
