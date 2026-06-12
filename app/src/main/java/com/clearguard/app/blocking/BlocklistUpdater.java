@@ -36,15 +36,46 @@ public final class BlocklistUpdater {
         Set<String> sources = prefs.getStringSet(
                 PreferenceKeys.KEY_SOURCE_URLS,
                 PreferenceKeys.defaultSources());
-        if (sources == null || sources.isEmpty()) {
+        if (sources == null) {
             sources = PreferenceKeys.defaultSources();
+        }
+        Set<String> disabledSources = prefs.getStringSet(
+                PreferenceKeys.KEY_DISABLED_SOURCE_URLS,
+                Collections.emptySet());
+        if (disabledSources == null) {
+            disabledSources = Collections.emptySet();
+        }
+
+        List<String> activeSources = new ArrayList<>();
+        for (String source : sources) {
+            if (!disabledSources.contains(source)) {
+                activeSources.add(source);
+            }
+        }
+
+        if (sources.isEmpty() || activeSources.isEmpty()) {
+            try {
+                writeHosts(appContext, Collections.emptySet());
+                prefs.edit()
+                        .putLong(PreferenceKeys.KEY_LAST_UPDATE_MILLIS, System.currentTimeMillis())
+                        .putInt(PreferenceKeys.KEY_LAST_UPDATE_COUNT, 0)
+                        .apply();
+                HostBlocker.get(appContext).reload();
+            } catch (IOException error) {
+                return new Result(false, 0, activeSources.size(), 0,
+                        "Could not clear disabled lists: " + error.getMessage());
+            }
+            String message = sources.isEmpty()
+                    ? "No filter sources configured"
+                    : "All filter sources are turned off";
+            return new Result(true, 0, activeSources.size(), 0, message);
         }
 
         LinkedHashSet<String> hosts = new LinkedHashSet<>();
         int successfulSources = 0;
         List<String> errors = new ArrayList<>();
 
-        for (String source : sources) {
+        for (String source : activeSources) {
             try {
                 int before = hosts.size();
                 downloadSource(source, hosts);
@@ -65,17 +96,22 @@ public final class BlocklistUpdater {
                         .apply();
                 HostBlocker.get(appContext).reload();
             } catch (IOException error) {
-                return new Result(false, successfulSources, sources.size(), hosts.size(),
+                return new Result(false, successfulSources, activeSources.size(), hosts.size(),
                         "Could not save list: " + error.getMessage());
             }
-            return new Result(true, successfulSources, sources.size(), hosts.size(), "");
+            return new Result(true, successfulSources, activeSources.size(), hosts.size(), "");
         }
 
         String message = errors.isEmpty() ? "No blocklist sources configured" : errors.get(0);
-        return new Result(false, 0, sources.size(), 0, message);
+        return new Result(false, 0, activeSources.size(), 0, message);
     }
 
     private static void downloadSource(String source, Set<String> target) throws IOException {
+        // Enforced here as well as in the UI so stale or imported preferences can
+        // never downgrade a list download to cleartext.
+        if (!source.regionMatches(true, 0, "https://", 0, 8)) {
+            throw new IOException("only https:// sources are allowed");
+        }
         URL url = new URL(source);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
@@ -136,6 +172,10 @@ public final class BlocklistUpdater {
     }
 
     private static String shortName(String source) {
+        String displayName = PreferenceKeys.sourceDisplayName(source);
+        if (!"Custom filter list".equals(displayName)) {
+            return displayName;
+        }
         int slash = source.lastIndexOf('/');
         if (slash >= 0 && slash + 1 < source.length()) {
             return source.substring(slash + 1);

@@ -5,8 +5,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -15,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.clearguard.app.ui.theme.ClearColors
+import com.clearguard.app.ui.theme.ClearDesign
 
 /**
  * Premium 3D Glassmorphic Card
@@ -22,19 +25,30 @@ import com.clearguard.app.ui.theme.ClearColors
  * - Crisp edge highlight (glass refraction)
  * - Strong drop shadow for floating 3D depth
  * - Bevel / specular highlight gradient for realistic 3D glass feel
+ *
+ * All defaults come from [ClearDesign]; colors follow the active [ClearColors]
+ * palette, so the card adapts to light and dark themes automatically.
  */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 26.dp,
-    glassAlpha: Float = 0.86f,
-    elevation: Dp = 18.dp,
+    cornerRadius: Dp = ClearDesign.cardCorner,
+    glassAlpha: Float = ClearDesign.cardGlassAlpha,
+    elevation: Dp = ClearDesign.cardElevation,
     content: @Composable BoxScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(cornerRadius)
 
     Box(
         modifier = modifier
+            // 3D floating shadow (ambient + spot for depth); applied before the clip
+            // so it renders fully outside the rounded outline.
+            .shadow(
+                elevation = elevation,
+                shape = shape,
+                ambientColor = ClearColors.glassShadow,
+                spotColor = Color.Black.copy(alpha = 0.22f)
+            )
             .clip(shape)
             // Main frosted glass layer
             .background(
@@ -44,15 +58,20 @@ fun GlassCard(
             // Glass edge / refraction border
             .border(
                 width = 1.25.dp,
-                color = ClearColors.glassBorder,
+                brush = if (ClearColors.glassBorder.alpha > 0.2f) {
+                    Brush.verticalGradient(
+                        0f to ClearColors.glassBorder,
+                        0.4f to ClearColors.glassBorder.copy(alpha = ClearColors.glassBorder.alpha * 0.5f),
+                        1f to Color.Black.copy(alpha = 0.03f)
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.15f),
+                        0.5f to ClearColors.green.copy(alpha = 0.18f),
+                        1f to Color.Black.copy(alpha = 0.35f)
+                    )
+                },
                 shape = shape
-            )
-            // 3D floating shadow (ambient + spot for depth)
-            .shadow(
-                elevation = elevation,
-                shape = shape,
-                ambientColor = ClearColors.glassShadow,
-                spotColor = Color.Black.copy(alpha = 0.22f)
             )
     ) {
         // Inner 3D bevel / specular highlight layer (top shine + bottom soft shadow)
@@ -71,11 +90,11 @@ fun GlassCard(
                 )
         )
 
-        // Actual content
-        Box(
-            modifier = Modifier.matchParentSize(),
-            content = content
-        )
+        // Actual content. Text and icons that do not set an explicit color inherit
+        // the palette's text color, so cards stay readable in both themes.
+        CompositionLocalProvider(LocalContentColor provides ClearColors.text) {
+            Box(content = content)
+        }
     }
 }
 
@@ -89,9 +108,9 @@ fun GlassCardCompact(
 ) {
     GlassCard(
         modifier = modifier,
-        cornerRadius = 20.dp,
-        glassAlpha = 0.78f,
-        elevation = 8.dp,
+        cornerRadius = ClearDesign.compactCorner,
+        glassAlpha = ClearDesign.compactGlassAlpha,
+        elevation = ClearDesign.compactElevation,
         content = content
     )
 }
@@ -106,9 +125,9 @@ fun GlassCardHero(
 ) {
     GlassCard(
         modifier = modifier,
-        cornerRadius = 32.dp,
-        glassAlpha = 0.90f,
-        elevation = 26.dp,
+        cornerRadius = ClearDesign.heroCorner,
+        glassAlpha = ClearDesign.heroGlassAlpha,
+        elevation = ClearDesign.heroElevation,
         content = content
     )
 }

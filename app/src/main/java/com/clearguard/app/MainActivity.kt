@@ -13,18 +13,21 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,10 +36,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.clearguard.app.blocking.BlocklistUpdateWorker
 import com.clearguard.app.blocking.HostBlocker
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardHero
@@ -46,7 +58,10 @@ import com.clearguard.app.ui.screens.DashboardScreen
 import com.clearguard.app.ui.screens.SettingsScreen
 import com.clearguard.app.ui.screens.StatisticsScreen
 import com.clearguard.app.ui.theme.ClearColors
+import com.clearguard.app.ui.theme.ClearDesign
 import com.clearguard.app.ui.theme.ClearGuardTheme
+import com.clearguard.app.ui.theme.ThemeMode
+import com.clearguard.app.ui.theme.ClearMeshBackground
 import com.clearguard.app.vpn.ClearGuardVpnService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -55,7 +70,7 @@ enum class AppScreen(val title: String, val icon: ImageVector) {
     Dashboard("Home", Icons.Default.Shield),
     Activity("Activity", Icons.Default.History),
     Statistics("Stats", Icons.Default.BarChart),
-    Blocklists("Lists", Icons.Default.List),
+    Blocklists("Lists", Icons.AutoMirrored.Filled.List),
     Settings("Settings", Icons.Default.Settings)
 }
 
@@ -64,21 +79,43 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         PreferenceKeys.ensureDefaults(this)
         HostBlocker.get(this).reload()
+        BlocklistUpdateWorker.sync(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 11)
         }
         setContent {
-            ClearGuardTheme {
-                ClearGuardApp()
+            var themeMode by remember {
+                mutableStateOf(
+                    ThemeMode.fromPref(
+                        PreferenceKeys.prefs(this).getString(
+                            PreferenceKeys.KEY_THEME_MODE,
+                            PreferenceKeys.DEFAULT_THEME_MODE
+                        )
+                    )
+                )
+            }
+            ClearGuardTheme(themeMode = themeMode) {
+                ClearGuardApp(
+                    themeMode = themeMode,
+                    onThemeModeChange = { mode ->
+                        PreferenceKeys.prefs(this).edit()
+                            .putString(PreferenceKeys.KEY_THEME_MODE, mode.prefValue)
+                            .apply()
+                        themeMode = mode
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-fun ClearGuardApp() {
+fun ClearGuardApp(
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit
+) {
     val context = LocalContext.current
 
     var currentScreen by remember { mutableStateOf(AppScreen.Dashboard) }
@@ -180,27 +217,37 @@ fun ClearGuardApp() {
         }
     }
 
-    Scaffold(
-        containerColor = ClearColors.bg,
-        bottomBar = {
-            GlassBottomNavigation(
-                currentScreen = currentScreen,
-                onScreenSelected = { currentScreen = it }
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
+    val isDark = when (themeMode) {
+        ThemeMode.System -> isSystemInDarkTheme()
+        ThemeMode.Light -> false
+        ThemeMode.Dark -> true
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        ClearMeshBackground(darkTheme = isDark)
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentColor = ClearColors.text,
+            bottomBar = {
+                GlassBottomNavigation(
+                    currentScreen = currentScreen,
+                    onScreenSelected = { currentScreen = it }
+                )
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
             // Glassy top header
             GlassHeader(currentScreen.title, isProtected)
 
             AnimatedContent(
                 targetState = currentScreen,
                 transitionSpec = {
-                    fadeIn(tween(220)) togetherWith fadeOut(tween(180))
+                    fadeIn(tween(ClearDesign.screenFadeInMs)) togetherWith
+                        fadeOut(tween(ClearDesign.screenFadeOutMs))
                 },
                 modifier = Modifier.weight(1f)
             ) { screen ->
@@ -246,12 +293,15 @@ fun ClearGuardApp() {
                                 .putBoolean(PreferenceKeys.KEY_DOH_ENABLED, enabled)
                                 .apply()
                             dohEnabledState.value = enabled
-                        }
+                        },
+                        themeMode = themeMode,
+                        onThemeModeChange = onThemeModeChange
                     )
                 }
             }
         }
     }
+}
 }
 
 // === Real aggregate stats helpers ===
@@ -350,6 +400,17 @@ fun GlassHeader(title: String, isProtected: Boolean) {
         }
 
         // Status pill (glass)
+        val infiniteTransition = rememberInfiniteTransition(label = "statusPill")
+        val pulseAlpha by infiniteTransition.animateFloat(
+            initialValue = 0.25f,
+            targetValue = 0.85f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulseAlpha"
+        )
+
         GlassCard(
             modifier = Modifier.height(36.dp),
             cornerRadius = 18.dp,
@@ -361,14 +422,26 @@ fun GlassHeader(title: String, isProtected: Boolean) {
                     .padding(horizontal = 14.dp)
                     .fillMaxHeight(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(9.dp)
-                        .clip(CircleShape)
-                        .background(if (isProtected) ClearColors.green else ClearColors.danger)
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (isProtected) ClearColors.green else ClearColors.danger)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .border(
+                                width = 1.5.dp,
+                                color = (if (isProtected) ClearColors.green else ClearColors.danger)
+                                    .copy(alpha = pulseAlpha),
+                                shape = CircleShape
+                            )
+                    )
+                }
                 Text(
                     text = if (isProtected) "Protected" else "Paused",
                     fontSize = 13.sp,
@@ -388,56 +461,94 @@ fun GlassBottomNavigation(
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        cornerRadius = 28.dp,
+        cornerRadius = ClearDesign.navCorner,
         glassAlpha = 0.92f,
-        elevation = 14.dp
+        elevation = ClearDesign.navElevation
     ) {
-        Row(
+        val selectedIndex = AppScreen.entries.indexOf(currentScreen)
+
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp)
-                .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 8.dp)
         ) {
-            AppScreen.entries.forEach { screen ->
-                val selected = currentScreen == screen
-                val scale by animateFloatAsState(
-                    targetValue = if (selected) 1.08f else 1f,
-                    animationSpec = tween(180), label = "navScale"
-                )
+            val tabWidth = maxWidth / AppScreen.entries.size
+            val animatedOffset by animateDpAsState(
+                targetValue = tabWidth * selectedIndex,
+                animationSpec = spring(dampingRatio = 0.76f, stiffness = 380f),
+                label = "navSlide"
+            )
 
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(20.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { onScreenSelected(screen) }
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = screen.icon,
-                        contentDescription = screen.title,
-                        tint = if (selected) ClearColors.green else ClearColors.muted,
+            // Dynamic sliding glass capsule background behind icons
+            Box(
+                modifier = Modifier
+                    .offset(x = animatedOffset)
+                    .width(tabWidth)
+                    .fillMaxHeight(0.85f)
+                    .align(Alignment.CenterStart)
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                ClearColors.green.copy(alpha = 0.15f),
+                                ClearColors.green.copy(alpha = 0.05f)
+                            )
+                        )
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = ClearColors.green.copy(alpha = 0.28f),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+            )
+
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppScreen.entries.forEach { screen ->
+                    val selected = currentScreen == screen
+                    val scale by animateFloatAsState(
+                        targetValue = if (selected) ClearDesign.navSelectedScale else 1f,
+                        animationSpec = tween(ClearDesign.pressFeedbackMs), label = "navScale"
+                    )
+
+                    Column(
                         modifier = Modifier
-                            .size(24.dp)
-                            .graphicsLayer {
-                                scaleX = scale
-                                scaleY = scale
-                            }
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = screen.title,
-                        fontSize = 11.sp,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (selected) ClearColors.green else ClearColors.muted
-                    )
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onScreenSelected(screen) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = screen.icon,
+                            contentDescription = screen.title,
+                            tint = if (selected) ClearColors.green else ClearColors.muted,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                }
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = screen.title,
+                            fontSize = 11.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selected) ClearColors.green else ClearColors.muted
+                        )
+                    }
                 }
             }
         }

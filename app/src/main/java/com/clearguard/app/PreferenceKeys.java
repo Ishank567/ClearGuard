@@ -21,6 +21,7 @@ public final class PreferenceKeys {
     public static final String KEY_ALLOWLIST = "allowlist";
     public static final String KEY_CACHE_TTL_SECONDS = "cache_ttl_seconds";
     public static final String KEY_CUSTOM_BLOCKS = "custom_blocks";
+    public static final String KEY_SECURITY_BLOCKS = "security_blocks";
     public static final String KEY_LAST_UPDATE_COUNT = "last_update_count";
     public static final String KEY_LAST_UPDATE_MILLIS = "last_update_millis";
     public static final String KEY_SCAM_BLOCKED_COUNT = "scam_blocked_count";
@@ -29,12 +30,29 @@ public final class PreferenceKeys {
     public static final String KEY_UPSTREAM_AVERAGE_LATENCY_MS = "upstream_average_latency_ms";
     public static final String KEY_UPSTREAM_QUERY_COUNT = "upstream_query_count";
     public static final String KEY_SOURCE_URLS = "source_urls";
+    public static final String KEY_DISABLED_SOURCE_URLS = "disabled_source_urls";
     public static final String KEY_UPSTREAM_DNS = "upstream_dns";
     public static final String KEY_DOH_QUERY_COUNT = "doh_query_count";
     public static final String KEY_DOH_FALLBACK_COUNT = "doh_fallback_count";
     public static final String KEY_DOH_ENABLED = "doh_enabled";
     public static final String KEY_DOH_URL = "doh_url";
     public static final String KEY_DOH_PROVIDER = "doh_provider";
+    public static final String KEY_AUTO_UPDATE_ENABLED = "auto_update_enabled";
+    public static final String KEY_BYPASS_GUARD_ENABLED = "bypass_guard_enabled";
+    public static final String KEY_RESUME_ON_BOOT = "resume_on_boot";
+    /** Tracks whether the user last wanted protection on, so it can resume after a reboot. */
+    public static final String KEY_PROTECTION_DESIRED = "protection_desired";
+    /** Appearance: "system", "light", or "dark". */
+    public static final String KEY_THEME_MODE = "theme_mode";
+    /** Package names excluded from the VPN (their traffic bypasses filtering). */
+    public static final String KEY_EXCLUDED_APPS = "excluded_apps";
+    /** JSON object of domain -> block count, maintained by the VPN service. */
+    public static final String KEY_TOP_BLOCKED_JSON = "top_blocked_json";
+    /**
+     * Tracks one-time migrations that add new bundled default sources without
+     * re-adding sources the user removes later.
+     */
+    private static final String KEY_DEFAULT_SOURCES_VERSION = "default_sources_version";
 
     public static final int DEFAULT_CACHE_TTL_SECONDS = 300;
     public static final boolean DEFAULT_SCAM_SHIELD_ENABLED = true;
@@ -42,6 +60,11 @@ public final class PreferenceKeys {
     public static final boolean DEFAULT_DOH_ENABLED = true;
     public static final String DEFAULT_DOH_URL = "https://dns.quad9.net/dns-query";
     public static final String DEFAULT_DOH_PROVIDER = "quad9";
+    public static final boolean DEFAULT_AUTO_UPDATE_ENABLED = true;
+    public static final boolean DEFAULT_BYPASS_GUARD_ENABLED = true;
+    public static final boolean DEFAULT_RESUME_ON_BOOT = true;
+    public static final String DEFAULT_THEME_MODE = "system";
+    private static final int DEFAULT_SOURCES_VERSION = 3;
 
     private PreferenceKeys() {
     }
@@ -58,6 +81,20 @@ public final class PreferenceKeys {
 
         if (!prefs.contains(KEY_SOURCE_URLS)) {
             editor.putStringSet(KEY_SOURCE_URLS, defaultSources());
+            editor.putInt(KEY_DEFAULT_SOURCES_VERSION, DEFAULT_SOURCES_VERSION);
+            changed = true;
+        } else if (prefs.getInt(KEY_DEFAULT_SOURCES_VERSION, 0) < DEFAULT_SOURCES_VERSION) {
+            int oldVersion = prefs.getInt(KEY_DEFAULT_SOURCES_VERSION, 0);
+            Set<String> storedSources = prefs.getStringSet(KEY_SOURCE_URLS, Collections.emptySet());
+            Set<String> previousSources = storedSources == null ? Collections.emptySet() : storedSources;
+            Set<String> merged = new LinkedHashSet<>(previousSources);
+            for (int version = oldVersion + 1; version <= DEFAULT_SOURCES_VERSION; version++) {
+                merged.addAll(defaultSourcesAddedInVersion(version));
+            }
+            if (!merged.equals(previousSources)) {
+                editor.putStringSet(KEY_SOURCE_URLS, merged);
+            }
+            editor.putInt(KEY_DEFAULT_SOURCES_VERSION, DEFAULT_SOURCES_VERSION);
             changed = true;
         }
         if (!prefs.contains(KEY_UPSTREAM_DNS)) {
@@ -84,6 +121,18 @@ public final class PreferenceKeys {
             editor.putString(KEY_DOH_PROVIDER, DEFAULT_DOH_PROVIDER);
             changed = true;
         }
+        if (!prefs.contains(KEY_AUTO_UPDATE_ENABLED)) {
+            editor.putBoolean(KEY_AUTO_UPDATE_ENABLED, DEFAULT_AUTO_UPDATE_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BYPASS_GUARD_ENABLED)) {
+            editor.putBoolean(KEY_BYPASS_GUARD_ENABLED, DEFAULT_BYPASS_GUARD_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_RESUME_ON_BOOT)) {
+            editor.putBoolean(KEY_RESUME_ON_BOOT, DEFAULT_RESUME_ON_BOOT);
+            changed = true;
+        }
 
         if (changed) {
             editor.apply();
@@ -91,10 +140,88 @@ public final class PreferenceKeys {
     }
 
     public static Set<String> defaultSources() {
-        return new LinkedHashSet<>(Arrays.asList(
-                "https://adaway.org/hosts.txt",
-                "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
-        ));
+        LinkedHashSet<String> sources = new LinkedHashSet<>();
+        for (int version = 1; version <= DEFAULT_SOURCES_VERSION; version++) {
+            sources.addAll(defaultSourcesAddedInVersion(version));
+        }
+        return sources;
+    }
+
+    private static Set<String> defaultSourcesAddedInVersion(int version) {
+        if (version == 1) {
+            return new LinkedHashSet<>(Arrays.asList(
+                    "https://adaway.org/hosts.txt",
+                    "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+            ));
+        }
+        if (version == 2) {
+            return new LinkedHashSet<>(Arrays.asList(
+                    "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt",
+                    "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
+                    "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt",
+                    "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt",
+                    "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-specific.txt",
+                    "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-android-specific.txt"
+            ));
+        }
+        if (version == 3) {
+            return new LinkedHashSet<>(Arrays.asList(
+                    "https://big.oisd.nl/",
+                    "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/multi.txt",
+                    "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/tif.txt",
+                    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_11.txt",
+                    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_18.txt",
+                    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_8.txt",
+                    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_12.txt",
+                    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_30.txt",
+                    "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext"
+            ));
+        }
+        return Collections.emptySet();
+    }
+
+    public static String sourceDisplayName(String source) {
+        if (source == null) {
+            return "Custom filter list";
+        }
+        switch (source) {
+            case "https://adaway.org/hosts.txt":
+                return "AdAway Default Blocklist";
+            case "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts":
+                return "StevenBlack Unified Hosts";
+            case "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt":
+                return "AdGuard DNS Filter";
+            case "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt":
+                return "uBlock Origin Filters";
+            case "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt":
+                return "uBlock Origin Privacy";
+            case "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt":
+                return "uBlock Origin Badware";
+            case "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-specific.txt":
+                return "Brave Specific Filters";
+            case "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-android-specific.txt":
+                return "Brave Android Filters";
+            case "https://big.oisd.nl/":
+                return "OISD Big";
+            case "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/multi.txt":
+                return "HaGeZi Multi";
+            case "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/tif.txt":
+                return "HaGeZi Threat Intelligence";
+            case "https://adguardteam.github.io/HostlistsRegistry/assets/filter_11.txt":
+                return "URLhaus Malicious URLs";
+            case "https://adguardteam.github.io/HostlistsRegistry/assets/filter_18.txt":
+                return "Phishing Army";
+            case "https://adguardteam.github.io/HostlistsRegistry/assets/filter_8.txt":
+                return "NoCoin Filter List";
+            case "https://adguardteam.github.io/HostlistsRegistry/assets/filter_12.txt":
+                return "Dandelion Sprout Anti-Malware";
+            case "https://adguardteam.github.io/HostlistsRegistry/assets/filter_30.txt":
+                return "PhishTank and OpenPhish";
+            case "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext":
+                return "Peter Lowe Ad and Tracking Servers";
+            default:
+                return "Custom filter list";
+        }
     }
 
     /**

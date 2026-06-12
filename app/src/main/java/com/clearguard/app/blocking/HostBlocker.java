@@ -27,6 +27,7 @@ public final class HostBlocker {
     private final Context context;
     private volatile Set<String> blockedHosts = Collections.emptySet();
     private volatile Set<String> allowedHosts = Collections.emptySet();
+    private volatile Set<String> securityHosts = Collections.emptySet();
 
     private HostBlocker(Context context) {
         this.context = context.getApplicationContext();
@@ -48,15 +49,20 @@ public final class HostBlocker {
 
         Set<String> nextBlocked = new HashSet<>();
         Set<String> nextAllowed = new HashSet<>();
+        Set<String> nextSecurity = new HashSet<>();
 
         loadAssetHosts(nextBlocked);
         loadDownloadedHosts(nextBlocked);
         loadPreferenceHosts(PreferenceKeys.KEY_CUSTOM_BLOCKS, nextBlocked);
+        loadPreferenceHosts(PreferenceKeys.KEY_SECURITY_BLOCKS, nextSecurity);
         loadPreferenceHosts(PreferenceKeys.KEY_ALLOWLIST, nextAllowed);
 
+        nextBlocked.addAll(nextSecurity);
         nextBlocked.removeAll(nextAllowed);
+
         blockedHosts = Collections.unmodifiableSet(nextBlocked);
         allowedHosts = Collections.unmodifiableSet(nextAllowed);
+        securityHosts = Collections.unmodifiableSet(nextSecurity);
         return snapshot();
     }
 
@@ -69,6 +75,17 @@ public final class HostBlocker {
             return false;
         }
         return containsDomain(blockedHosts, normalized);
+    }
+
+    public boolean isSecurityBlock(String domain) {
+        String normalized = normalizeDomain(domain);
+        if (normalized == null) {
+            return false;
+        }
+        if (containsDomain(allowedHosts, normalized)) {
+            return false;
+        }
+        return containsDomain(securityHosts, normalized);
     }
 
     public boolean isAllowed(String domain) {
@@ -88,12 +105,15 @@ public final class HostBlocker {
             return Collections.emptyList();
         }
 
-        String line = stripComment(rawLine).trim();
+        String line = rawLine.replace("\uFEFF", "").trim();
         if (line.isEmpty()) {
             return Collections.emptyList();
         }
+        if (isCommentOrMetadata(line) || isCosmeticFilterRule(line) || line.startsWith("@@")) {
+            return Collections.emptyList();
+        }
 
-        String dnsmasq = hostFromDnsmasqAddress(line);
+        String dnsmasq = hostFromDnsmasqRule(stripInlineHostsComment(line));
         if (dnsmasq != null) {
             return Collections.singletonList(dnsmasq);
         }
@@ -103,12 +123,27 @@ public final class HostBlocker {
             return Collections.singletonList(adblock);
         }
 
+        line = stripInlineHostsComment(line);
+        if (line.indexOf('/') >= 0 || line.indexOf('$') >= 0 || line.indexOf('*') >= 0) {
+            return Collections.emptyList();
+        }
+
         List<String> hosts = new ArrayList<>();
         String[] parts = line.split("\\s+");
-        for (String part : parts) {
-            String normalized = normalizeDomain(part);
+        if (parts.length == 1) {
+            String normalized = normalizeDomain(parts[0]);
             if (normalized != null) {
                 hosts.add(normalized);
+            }
+            return hosts;
+        }
+
+        if (isHostsAddress(parts[0])) {
+            for (int i = 1; i < parts.length; i++) {
+                String normalized = normalizeDomain(parts[i]);
+                if (normalized != null) {
+                    hosts.add(normalized);
+                }
             }
         }
         return hosts;
@@ -257,28 +292,73 @@ public final class HostBlocker {
         }
     }
 
-    private static String stripComment(String line) {
-        int hash = line.indexOf('#');
-        return hash >= 0 ? line.substring(0, hash) : line;
+    private static boolean isCommentOrMetadata(String line) {
+        return line.startsWith("#")
+                || line.startsWith("!")
+                || line.startsWith("[")
+                || line.startsWith("Title:")
+                || line.startsWith("Version:")
+                || line.startsWith("Expires:");
     }
 
-    private static String hostFromDnsmasqAddress(String line) {
-        if (!line.startsWith("address=/")) {
-            return null;
+    private static boolean isCosmeticFilterRule(String line) {
+        return line.contains("##")
+                || line.contains("#@#")
+                || line.contains("#?#")
+                || line.contains("#$#")
+                || line.contains("#@$#");
+    }
+
+    private static String stripInlineHostsComment(String line) {
+        int hash = line.indexOf('#');
+        if (hash < 0) {
+            return line.trim();
         }
-        int start = "address=/".length();
-        int end = line.indexOf('/', start);
-        if (end <= start) {
-            return null;
+        if (hash == 0 || Character.isWhitespace(line.charAt(hash - 1))) {
+            return line.substring(0, hash).trim();
         }
-        return normalizeDomain(line.substring(start, end));
+        return line.trim();
+    }
+
+    private static String hostFromDnsmasqRule(String line) {
+        for (String prefix : new String[]{"address=/", "server=/", "local=/"}) {
+            if (line.startsWith(prefix)) {
+                int start = prefix.length();
+                int end = line.indexOf('/', start);
+                if (end <= start) {
+                    return null;
+                }
+                return normalizeDomain(line.substring(start, end));
+            }
+        }
+        return null;
     }
 
     private static String hostFromAdblockRule(String line) {
         if (!line.startsWith("||")) {
             return null;
         }
-        return normalizeDomain(line);
+        int optionIndex = line.indexOf('$');
+        if (optionIndex >= 0) {
+            String options = line.substring(optionIndex + 1).toLowerCase(Locale.US);
+            if (options.contains("badfilter") || options.contains("domain=")) {
+                return null;
+            }
+        }
+
+        String domainPart = optionIndex >= 0 ? line.substring(2, optionIndex) : line.substring(2);
+        int separator = firstIndexOf(domainPart, '^', '/');
+        if (separator >= 0 && domainPart.charAt(separator) == '/') {
+            // Path-specific browser filters cannot be represented safely as DNS blocks.
+            return null;
+        }
+        if (separator >= 0) {
+            domainPart = domainPart.substring(0, separator);
+        }
+        if (domainPart.indexOf('*') >= 0) {
+            return null;
+        }
+        return normalizeDomain(domainPart);
     }
 
     private static int firstIndexOf(String value, char a, char b, char c) {
@@ -290,6 +370,25 @@ public final class HostBlocker {
             }
         }
         return best;
+    }
+
+    private static int firstIndexOf(String value, char a, char b) {
+        int first = value.indexOf(a);
+        int second = value.indexOf(b);
+        if (first < 0) {
+            return second;
+        }
+        if (second < 0) {
+            return first;
+        }
+        return Math.min(first, second);
+    }
+
+    private static boolean isHostsAddress(String value) {
+        return value.equals("0.0.0.0")
+                || value.equals("127.0.0.1")
+                || value.equals("::")
+                || value.equals("::1");
     }
 
     private static boolean looksLikeIpAddress(String value) {

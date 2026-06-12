@@ -15,6 +15,7 @@ import android.os.SystemClock;
 import com.clearguard.app.MainActivity;
 import com.clearguard.app.PreferenceKeys;
 import com.clearguard.app.blocking.HostBlocker;
+import com.clearguard.app.security.DnsBypassGuard;
 import com.clearguard.app.security.ScamDetector;
 
 import java.io.FileInputStream;
@@ -23,13 +24,18 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketException;
+import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class ClearGuardVpnService extends VpnService {
     public static final String ACTION_START = "com.clearguard.app.START";
     public static final String ACTION_STOP = "com.clearguard.app.STOP";
     public static final String ACTION_RELOAD = "com.clearguard.app.RELOAD";
+    public static final String ACTION_RESTART = "com.clearguard.app.RESTART";
     public static final String ACTION_STATS_CHANGED = "com.clearguard.app.STATS_CHANGED";
 
     private static final String CHANNEL_ID = "clear_guard_vpn";
@@ -37,21 +43,37 @@ public final class ClearGuardVpnService extends VpnService {
     private static final String VPN_ADDRESS = "10.64.0.2";
     private static final String VIRTUAL_DNS = "10.64.0.1";
 
-    private static final int RECENT_BLOCKED_MAX = 50;
-    private static final java.util.ArrayDeque<BlockedQuery> RECENT_BLOCKED = new java.util.ArrayDeque<>();
+    private static final int RECENT_QUERIES_MAX = 100;
+    private static final java.util.ArrayDeque<BlockedQuery> RECENT_QUERIES = new java.util.ArrayDeque<>();
 
     private static volatile boolean runningVisibleToUi;
     public static volatile boolean isRunning;
 
+    // Each DNS query is handled on this pool so one slow upstream lookup never blocks
+    // the rest of the device's DNS traffic. CallerRunsPolicy gives natural backpressure.
+    private static final int MAX_QUERY_THREADS = 8;
+
+    /** How many per-domain block counters are persisted for the statistics screen. */
+    private static final int TOP_DOMAINS_LIMIT = 50;
+
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final DnsResponseCache responseCache = new DnsResponseCache();
-    private final Object upstreamSocketLock = new Object();
+    private final Object statsLock = new Object();
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> blockedDomainCounts =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Bumped on every successful start so a packet loop from a previous VPN session
+     * (e.g. before an in-place restart) cannot tear down the current one.
+     */
+    private volatile int vpnGeneration;
 
     private ParcelFileDescriptor vpnInterface;
-    private DatagramSocket upstreamSocket;
     private HostBlocker blocker;
     private SharedPreferences prefs;
     private Thread workerThread;
+    private ExecutorService queryExecutor;
+    private DohResolver dohResolver;
 
     private long allowedTotal;
     private long blockedTotal;
@@ -75,6 +97,8 @@ public final class ClearGuardVpnService extends VpnService {
 
     private boolean dohEnabled;
     private String dohUrl;
+    private boolean bypassGuardEnabled;
+    private String bypassExemptHost;
 
     public static boolean isRunning() {
         return runningVisibleToUi;
@@ -106,28 +130,43 @@ public final class ClearGuardVpnService extends VpnService {
         context.startService(intent);
     }
 
-    /** A point-in-time snapshot of recently blocked domains (most recent first). */
+    /**
+     * Rebuilds the VPN interface in place so changes that require a new Builder
+     * (such as per-app exclusions) take effect. No-op when protection is off.
+     */
+    public static void restartIfRunning(Context context) {
+        if (!runningVisibleToUi) {
+            return;
+        }
+        Intent intent = new Intent(context, ClearGuardVpnService.class).setAction(ACTION_RESTART);
+        context.startService(intent);
+    }
+
+    /** A point-in-time snapshot of recent queries (most recent first). */
     public static java.util.List<BlockedQuery> recentBlocked() {
-        synchronized (RECENT_BLOCKED) {
-            return new java.util.ArrayList<>(RECENT_BLOCKED);
+        synchronized (RECENT_QUERIES) {
+            return new java.util.ArrayList<>(RECENT_QUERIES);
         }
     }
 
     public static void clearRecentBlocked() {
-        synchronized (RECENT_BLOCKED) {
-            RECENT_BLOCKED.clear();
+        synchronized (RECENT_QUERIES) {
+            RECENT_QUERIES.clear();
         }
     }
 
-    private static void addRecentBlocked(String domain, String reason, int threatScore) {
-        synchronized (RECENT_BLOCKED) {
-            RECENT_BLOCKED.addFirst(new BlockedQuery(
+    private static void addRecentQuery(String domain, String reason, int threatScore, boolean blocked, String status, int latencyMs) {
+        synchronized (RECENT_QUERIES) {
+            RECENT_QUERIES.addFirst(new BlockedQuery(
                     domain,
                     System.currentTimeMillis(),
                     reason,
-                    threatScore));
-            while (RECENT_BLOCKED.size() > RECENT_BLOCKED_MAX) {
-                RECENT_BLOCKED.removeLast();
+                    threatScore,
+                    blocked,
+                    status,
+                    latencyMs));
+            while (RECENT_QUERIES.size() > RECENT_QUERIES_MAX) {
+                RECENT_QUERIES.removeLast();
             }
         }
     }
@@ -152,7 +191,9 @@ public final class ClearGuardVpnService extends VpnService {
         lastBlockDay = prefs.getString(PreferenceKeys.KEY_LAST_BLOCK_DAY, "");
         lastStatsFlushMillis = System.currentTimeMillis();
         resetTodayIfNewDay();
+        loadTopBlocked();
 
+        dohResolver = new DohResolver();
         loadDohConfig();
         createNotificationChannel();
     }
@@ -161,6 +202,7 @@ public final class ClearGuardVpnService extends VpnService {
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? ACTION_START : intent.getAction();
         if (ACTION_STOP.equals(action)) {
+            prefs.edit().putBoolean(PreferenceKeys.KEY_PROTECTION_DESIRED, false).apply();
             stopVpn();
             stopSelf();
             return START_NOT_STICKY;
@@ -175,6 +217,15 @@ public final class ClearGuardVpnService extends VpnService {
             }
             return START_STICKY;
         }
+        if (ACTION_RESTART.equals(action)) {
+            if (!running.get()) {
+                stopSelf(startId);
+                return START_NOT_STICKY;
+            }
+            stopVpn();
+            startVpn();
+            return START_STICKY;
+        }
 
         startVpn();
         return START_STICKY;
@@ -183,11 +234,16 @@ public final class ClearGuardVpnService extends VpnService {
     @Override
     public void onDestroy() {
         stopVpn();
+        if (dohResolver != null) {
+            dohResolver.shutdown();
+        }
         super.onDestroy();
     }
 
     @Override
     public void onRevoke() {
+        // The user (or another VPN) revoked consent; do not auto-resume on the next boot.
+        prefs.edit().putBoolean(PreferenceKeys.KEY_PROTECTION_DESIRED, false).apply();
         stopVpn();
         super.onRevoke();
     }
@@ -212,6 +268,19 @@ public final class ClearGuardVpnService extends VpnService {
                 builder.setMetered(false);
             }
 
+            // Per-app exclusions: traffic from these apps never enters the tunnel.
+            java.util.Set<String> excludedApps = prefs.getStringSet(
+                    PreferenceKeys.KEY_EXCLUDED_APPS, java.util.Collections.emptySet());
+            if (excludedApps != null) {
+                for (String packageName : excludedApps) {
+                    try {
+                        builder.addDisallowedApplication(packageName);
+                    } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {
+                        // The app was uninstalled; skip it.
+                    }
+                }
+            }
+
             vpnInterface = builder.establish();
             if (vpnInterface == null) {
                 throw new IOException("VPN permission was not granted");
@@ -220,8 +289,19 @@ public final class ClearGuardVpnService extends VpnService {
             running.set(true);
             runningVisibleToUi = true;
             isRunning = true;
-            workerThread = new Thread(this::runPacketLoop, "ClearGuardDnsVpn");
+            queryExecutor = new ThreadPoolExecutor(
+                    0,
+                    MAX_QUERY_THREADS,
+                    30L,
+                    TimeUnit.SECONDS,
+                    new SynchronousQueue<>(),
+                    new ThreadPoolExecutor.CallerRunsPolicy());
+            vpnGeneration++;
+            final int generation = vpnGeneration;
+            final ParcelFileDescriptor iface = vpnInterface;
+            workerThread = new Thread(() -> runPacketLoop(iface, generation), "ClearGuardDnsVpn");
             workerThread.start();
+            prefs.edit().putBoolean(PreferenceKeys.KEY_PROTECTION_DESIRED, true).apply();
             updateNotification("DNS shield active");
         } catch (IOException | RuntimeException error) {
             running.set(false);
@@ -237,29 +317,49 @@ public final class ClearGuardVpnService extends VpnService {
         running.set(false);
         runningVisibleToUi = false;
         isRunning = false;
-        closeUpstreamSocket();
+        if (queryExecutor != null) {
+            queryExecutor.shutdownNow();
+            queryExecutor = null;
+        }
         closeVpnInterface();
         flushStats(true);
         clearRecentBlocked();
         stopForegroundCompat();
     }
 
-    private void runPacketLoop() {
+    private void runPacketLoop(ParcelFileDescriptor iface, int generation) {
         byte[] packet = new byte[32767];
         try (
-                FileInputStream input = new FileInputStream(vpnInterface.getFileDescriptor());
-                FileOutputStream output = new FileOutputStream(vpnInterface.getFileDescriptor())
+                FileInputStream input = new FileInputStream(iface.getFileDescriptor());
+                FileOutputStream output = new FileOutputStream(iface.getFileDescriptor())
         ) {
-            while (running.get()) {
+            while (running.get() && generation == vpnGeneration) {
                 int length = input.read(packet);
                 if (length > 0) {
-                    handlePacket(packet, length, output);
+                    byte[] copy = Arrays.copyOf(packet, length);
+                    ExecutorService executor = queryExecutor;
+                    if (executor == null) {
+                        break;
+                    }
+                    executor.execute(() -> {
+                        try {
+                            handlePacket(copy, copy.length, output);
+                        } catch (IOException | RuntimeException ignored) {
+                            // A failed query must not take down the other in-flight queries.
+                        }
+                    });
                 }
             }
         } catch (IOException ignored) {
             // Closing the VPN descriptor during stop also lands here.
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // The executor shut down while we were dispatching; the loop is ending anyway.
         } finally {
-            stopVpn();
+            // Only tear the service down if this loop still belongs to the live session;
+            // after an in-place restart the old loop must exit without side effects.
+            if (generation == vpnGeneration) {
+                stopVpn();
+            }
         }
     }
 
@@ -280,7 +380,18 @@ public final class ClearGuardVpnService extends VpnService {
         ScamDetector.Result scamThreat = scamThreat(question.name);
         if (blocker.shouldBlock(question.name)) {
             dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
-            recordBlocked(question.name);
+            if (blocker.isSecurityBlock(question.name)) {
+                recordSecurityBlocked(question.name);
+            } else {
+                recordBlocked(question.name);
+            }
+        } else if (bypassGuardEnabled
+                && !blocker.isAllowed(question.name)
+                && DnsBypassGuard.isBypassDomain(question.name, bypassExemptHost)) {
+            // SERVFAIL makes apps fall back to the (filtered) system resolver instead
+            // of tunneling their lookups through their own encrypted DNS.
+            dnsResponse = DnsMessage.servfailResponse(request.dnsPayload, question);
+            recordBypassBlocked(question.name);
         } else if (scamThreat != null && scamThreat.blocked) {
             dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
             recordScamBlocked(question.name, scamThreat);
@@ -307,18 +418,23 @@ public final class ClearGuardVpnService extends VpnService {
                             PreferenceKeys.KEY_CACHE_TTL_SECONDS,
                             PreferenceKeys.DEFAULT_CACHE_TTL_SECONDS);
                     responseCache.put(question.cacheKey(), dnsResponse, ttlSeconds);
+                    int latency = (int) (SystemClock.elapsedRealtime() - startMillis);
+                    recordAllowedQuery(question.name, dohEnabled ? "DoH resolved" : "Standard resolved", latency);
                 } catch (IOException error) {
                     dnsResponse = DnsMessage.servfailResponse(request.dnsPayload, question);
                 }
             } else {
                 recordCacheHit();
+                recordAllowedQuery(question.name, "Cache hit", 0);
             }
             recordAllowed();
         }
 
         byte[] responsePacket = DnsPacket.buildUdpResponse(request, dnsResponse);
-        output.write(responsePacket);
-        output.flush();
+        synchronized (output) {
+            output.write(responsePacket);
+            output.flush();
+        }
     }
 
     private byte[] forwardToUpstream(byte[] dnsPayload) throws IOException {
@@ -327,8 +443,12 @@ public final class ClearGuardVpnService extends VpnService {
                 PreferenceKeys.DEFAULT_UPSTREAM_DNS);
         InetAddress upstreamAddress = InetAddress.getByName(upstream);
 
-        synchronized (upstreamSocketLock) {
-            DatagramSocket socket = upstreamSocket();
+        // One socket per query keeps concurrent lookups independent and avoids
+        // matching responses to the wrong in-flight question.
+        DatagramSocket socket = new DatagramSocket();
+        try {
+            protect(socket);
+            socket.setSoTimeout(3000);
             DatagramPacket query = new DatagramPacket(
                     dnsPayload,
                     dnsPayload.length,
@@ -343,6 +463,8 @@ public final class ClearGuardVpnService extends VpnService {
             byte[] payload = new byte[response.getLength()];
             System.arraycopy(response.getData(), response.getOffset(), payload, 0, response.getLength());
             return payload;
+        } finally {
+            socket.close();
         }
     }
 
@@ -350,41 +472,7 @@ public final class ClearGuardVpnService extends VpnService {
         String endpoint = (dohUrl != null && !dohUrl.isEmpty())
                 ? dohUrl
                 : PreferenceKeys.DEFAULT_DOH_URL;
-
-        java.net.URL url = new java.net.URL(endpoint);
-        javax.net.ssl.HttpsURLConnection conn = (javax.net.ssl.HttpsURLConnection) url.openConnection();
-        conn.setConnectTimeout(8000);
-        conn.setReadTimeout(6500);
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty("Content-Type", "application/dns-message");
-        conn.setRequestProperty("Accept", "application/dns-message");
-        conn.setRequestProperty("User-Agent", "ClearGuard/0.2 DoH");
-        conn.setDoOutput(true);
-        conn.setDoInput(true);
-        conn.setInstanceFollowRedirects(true);
-
-        try (java.io.OutputStream os = conn.getOutputStream()) {
-            os.write(dnsPayload);
-            os.flush();
-        }
-
-        int code = conn.getResponseCode();
-        if (code != 200) {
-            conn.disconnect();
-            throw new IOException("DoH server returned HTTP " + code);
-        }
-
-        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-        try (java.io.InputStream is = conn.getInputStream()) {
-            byte[] buf = new byte[4096];
-            int read;
-            while ((read = is.read(buf)) != -1) {
-                baos.write(buf, 0, read);
-            }
-        } finally {
-            conn.disconnect();
-        }
-        return baos.toByteArray();
+        return dohResolver.query(endpoint, dnsPayload);
     }
 
     private void loadDohConfig() {
@@ -394,26 +482,53 @@ public final class ClearGuardVpnService extends VpnService {
         dohUrl = prefs.getString(
                 PreferenceKeys.KEY_DOH_URL,
                 PreferenceKeys.DEFAULT_DOH_URL);
-    }
-
-    private DatagramSocket upstreamSocket() throws SocketException {
-        if (upstreamSocket == null || upstreamSocket.isClosed()) {
-            upstreamSocket = new DatagramSocket();
-            protect(upstreamSocket);
-            upstreamSocket.setSoTimeout(3000);
+        bypassGuardEnabled = prefs.getBoolean(
+                PreferenceKeys.KEY_BYPASS_GUARD_ENABLED,
+                PreferenceKeys.DEFAULT_BYPASS_GUARD_ENABLED);
+        bypassExemptHost = null;
+        if (dohUrl != null && !dohUrl.isEmpty()) {
+            try {
+                String host = java.net.URI.create(dohUrl).getHost();
+                if (host != null) {
+                    bypassExemptHost = host.toLowerCase(java.util.Locale.US);
+                }
+            } catch (IllegalArgumentException ignored) {
+                // A malformed custom URL simply gets no exemption.
+            }
         }
-        return upstreamSocket;
     }
 
     private void recordAllowed() {
-        pendingAllowed++;
+        synchronized (statsLock) {
+            pendingAllowed++;
+        }
         flushStats(false);
     }
 
     private void recordBlocked(String domain) {
-        pendingBlocked++;
-        addRecentBlocked(domain, "Blocklist rule", 0);
+        synchronized (statsLock) {
+            pendingBlocked++;
+        }
+        countBlockedDomain(domain);
+        addRecentQuery(domain, "Blocklist rule", 0, true, "blocked", -1);
         flushStats(false);
+    }
+
+    private void recordSecurityBlocked(String domain) {
+        synchronized (statsLock) {
+            pendingBlocked++;
+            pendingScamBlocked++;
+        }
+        countBlockedDomain(domain);
+        addRecentQuery(domain, "Security blocklist", 75, true, "threat", -1);
+        flushStats(false);
+    }
+
+    private void countBlockedDomain(String domain) {
+        if (domain == null || domain.isEmpty()) {
+            return;
+        }
+        blockedDomainCounts.merge(domain.toLowerCase(java.util.Locale.US), 1L, Long::sum);
     }
 
     private ScamDetector.Result scamThreat(String domain) {
@@ -429,68 +544,96 @@ public final class ClearGuardVpnService extends VpnService {
     }
 
     private void recordScamBlocked(String domain, ScamDetector.Result threat) {
-        pendingBlocked++;
-        pendingScamBlocked++;
-        addRecentBlocked(domain, "Scam shield: " + threat.reason, threat.score);
+        synchronized (statsLock) {
+            pendingBlocked++;
+            pendingScamBlocked++;
+        }
+        countBlockedDomain(domain);
+        addRecentQuery(domain, "Scam shield: " + threat.reason, threat.score, true, "threat", -1);
         flushStats(false);
     }
 
+    private void recordBypassBlocked(String domain) {
+        synchronized (statsLock) {
+            pendingBlocked++;
+        }
+        countBlockedDomain(domain);
+        addRecentQuery(domain, "Bypass guard: private DNS sidestep", 0, true, "bypass", -1);
+        flushStats(false);
+    }
+
+    private void recordAllowedQuery(String domain, String reason, int latencyMs) {
+        addRecentQuery(domain, reason, 0, false, "allowed", latencyMs);
+    }
+
     private void recordCacheHit() {
-        pendingCacheHits++;
+        synchronized (statsLock) {
+            pendingCacheHits++;
+        }
         flushStats(false);
     }
 
     private void recordUpstreamLookup(long elapsedMillis) {
-        long boundedMillis = Math.max(1L, Math.min(elapsedMillis, 10000L));
-        long previousSamples = upstreamQueryTotal + pendingUpstreamQueries;
-        upstreamAverageLatencyMs =
-                ((upstreamAverageLatencyMs * previousSamples) + boundedMillis) / (previousSamples + 1);
-        pendingUpstreamQueries++;
+        synchronized (statsLock) {
+            long boundedMillis = Math.max(1L, Math.min(elapsedMillis, 10000L));
+            long previousSamples = upstreamQueryTotal + pendingUpstreamQueries;
+            upstreamAverageLatencyMs =
+                    ((upstreamAverageLatencyMs * previousSamples) + boundedMillis) / (previousSamples + 1);
+            pendingUpstreamQueries++;
+        }
         flushStats(false);
     }
 
     private void recordDohQuery() {
-        pendingDohQueries++;
+        synchronized (statsLock) {
+            pendingDohQueries++;
+        }
         flushStats(false);
     }
 
     private void recordDohFallback() {
-        pendingDohFallbacks++;
+        synchronized (statsLock) {
+            pendingDohFallbacks++;
+        }
         flushStats(false);
     }
 
     private void flushStats(boolean force) {
-        long pending = pendingAllowed + pendingBlocked + pendingCacheHits + pendingUpstreamQueries;
-        long now = System.currentTimeMillis();
-        if (!force && pending < 25 && now - lastStatsFlushMillis < 15000L) {
-            return;
-        }
-        if (pending == 0 && !force) {
-            return;
-        }
+        SharedPreferences.Editor editor;
+        long blockedTodaySnapshot;
+        synchronized (statsLock) {
+            long pending = pendingAllowed + pendingBlocked + pendingCacheHits + pendingUpstreamQueries;
+            long now = System.currentTimeMillis();
+            if (!force && pending < 25 && now - lastStatsFlushMillis < 15000L) {
+                return;
+            }
+            if (pending == 0 && !force) {
+                return;
+            }
 
-        resetTodayIfNewDay();
+            resetTodayIfNewDay();
 
-        allowedTotal += pendingAllowed;
-        blockedTotal += pendingBlocked;
-        blockedToday += pendingBlocked;
-        cacheHitTotal += pendingCacheHits;
-        scamBlockedTotal += pendingScamBlocked;
-        scamBlockedToday += pendingScamBlocked;
-        upstreamQueryTotal += pendingUpstreamQueries;
-        dohQueryTotal += pendingDohQueries;
-        dohFallbackTotal += pendingDohFallbacks;
+            allowedTotal += pendingAllowed;
+            blockedTotal += pendingBlocked;
+            blockedToday += pendingBlocked;
+            cacheHitTotal += pendingCacheHits;
+            scamBlockedTotal += pendingScamBlocked;
+            scamBlockedToday += pendingScamBlocked;
+            upstreamQueryTotal += pendingUpstreamQueries;
+            dohQueryTotal += pendingDohQueries;
+            dohFallbackTotal += pendingDohFallbacks;
 
-        pendingAllowed = 0;
-        pendingBlocked = 0;
-        pendingCacheHits = 0;
-        pendingScamBlocked = 0;
-        pendingUpstreamQueries = 0;
-        pendingDohQueries = 0;
-        pendingDohFallbacks = 0;
-        lastStatsFlushMillis = now;
+            pendingAllowed = 0;
+            pendingBlocked = 0;
+            pendingCacheHits = 0;
+            pendingScamBlocked = 0;
+            pendingUpstreamQueries = 0;
+            pendingDohQueries = 0;
+            pendingDohFallbacks = 0;
+            lastStatsFlushMillis = now;
+            blockedTodaySnapshot = blockedToday;
 
-        prefs.edit()
+            editor = prefs.edit()
                 .putLong(PreferenceKeys.KEY_ALLOWED_COUNT, allowedTotal)
                 .putLong(PreferenceKeys.KEY_BLOCKED_COUNT, blockedTotal)
                 .putLong(PreferenceKeys.KEY_BLOCKED_TODAY, blockedToday)
@@ -502,12 +645,57 @@ public final class ClearGuardVpnService extends VpnService {
                 .putLong(PreferenceKeys.KEY_UPSTREAM_QUERY_COUNT, upstreamQueryTotal)
                 .putLong(PreferenceKeys.KEY_DOH_QUERY_COUNT, dohQueryTotal)
                 .putLong(PreferenceKeys.KEY_DOH_FALLBACK_COUNT, dohFallbackTotal)
-                .apply();
+                .putString(PreferenceKeys.KEY_TOP_BLOCKED_JSON, topBlockedJson());
+        }
 
+        editor.apply();
         sendBroadcast(new Intent(ACTION_STATS_CHANGED).setPackage(getPackageName()));
         if (running.get()) {
-            updateNotification(blockedToday + " blocked today");
+            updateNotification(blockedTodaySnapshot + " blocked today");
         }
+    }
+
+    private void loadTopBlocked() {
+        String json = prefs.getString(PreferenceKeys.KEY_TOP_BLOCKED_JSON, "");
+        if (json == null || json.isEmpty()) {
+            return;
+        }
+        try {
+            org.json.JSONObject stored = new org.json.JSONObject(json);
+            java.util.Iterator<String> keys = stored.keys();
+            while (keys.hasNext()) {
+                String domain = keys.next();
+                long count = stored.optLong(domain, 0L);
+                if (count > 0L) {
+                    blockedDomainCounts.put(domain, count);
+                }
+            }
+        } catch (org.json.JSONException ignored) {
+            // A corrupt blob just means the leaderboard starts fresh.
+        }
+    }
+
+    /** Serializes the highest counters and trims the in-memory map so it stays bounded. */
+    private String topBlockedJson() {
+        java.util.List<java.util.Map.Entry<String, Long>> entries =
+                new java.util.ArrayList<>(blockedDomainCounts.entrySet());
+        entries.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
+
+        org.json.JSONObject result = new org.json.JSONObject();
+        try {
+            int limit = Math.min(entries.size(), TOP_DOMAINS_LIMIT);
+            for (int i = 0; i < limit; i++) {
+                result.put(entries.get(i).getKey(), entries.get(i).getValue());
+            }
+        } catch (org.json.JSONException ignored) {
+        }
+
+        if (entries.size() > 400) {
+            for (int i = 200; i < entries.size(); i++) {
+                blockedDomainCounts.remove(entries.get(i).getKey());
+            }
+        }
+        return result.toString();
     }
 
     private void resetTodayIfNewDay() {
@@ -583,15 +771,6 @@ public final class ClearGuardVpnService extends VpnService {
         vpnInterface = null;
     }
 
-    private void closeUpstreamSocket() {
-        synchronized (upstreamSocketLock) {
-            if (upstreamSocket != null) {
-                upstreamSocket.close();
-                upstreamSocket = null;
-            }
-        }
-    }
-
     private void stopForegroundCompat() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE);
@@ -600,18 +779,24 @@ public final class ClearGuardVpnService extends VpnService {
         }
     }
 
-    /** A single recently blocked DNS query. Held in memory only, never written to disk. */
+    /** A single recent DNS query. Held in memory only, never written to disk. */
     public static final class BlockedQuery {
         public final String domain;
         public final long timeMillis;
         public final String reason;
         public final int threatScore;
+        public final boolean blocked;
+        public final String status; // "allowed", "blocked", "threat", "bypass"
+        public final int latencyMs; // -1 for cache hits or blocks
 
-        BlockedQuery(String domain, long timeMillis, String reason, int threatScore) {
+        BlockedQuery(String domain, long timeMillis, String reason, int threatScore, boolean blocked, String status, int latencyMs) {
             this.domain = domain;
             this.timeMillis = timeMillis;
             this.reason = reason;
             this.threatScore = threatScore;
+            this.blocked = blocked;
+            this.status = status;
+            this.latencyMs = latencyMs;
         }
     }
 }

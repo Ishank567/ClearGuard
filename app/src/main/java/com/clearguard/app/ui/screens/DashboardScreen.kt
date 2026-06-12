@@ -1,26 +1,40 @@
 package com.clearguard.app.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.clearguard.app.PreferenceKeys
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardHero
 import com.clearguard.app.ui.components.LiquidGlassIconButton
@@ -61,32 +75,80 @@ fun DashboardScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
+                // Accent crossfades between active green and paused gray.
+                val accent by animateColorAsState(
+                    targetValue = if (isProtected) ClearColors.green else ClearColors.muted,
+                    animationSpec = tween(350),
+                    label = "heroAccent"
+                )
+
                 // 3D layered toggle button
                 val scale by animateFloatAsState(
                     targetValue = if (isProtected) 1.0f else 0.96f,
                     label = "toggleScale"
                 )
 
-                Box(
-                    modifier = Modifier
-                        .size(112.dp)
-                        .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                        }
-                        .clip(CircleShape)
-                        .background(
-                            if (isProtected)
-                                ClearColors.green.copy(alpha = 0.15f)
-                            else
-                                ClearColors.muted.copy(alpha = 0.12f)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
+                // Multi-layered breathing halos while protection is active.
+                val haloPulse = rememberInfiniteTransition(label = "protectedPulse")
+                val haloScale1 by haloPulse.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.14f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1600, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "haloScale1"
+                )
+                val haloScale2 by haloPulse.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.28f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(2000, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "haloScale2"
+                )
+
+                Box(contentAlignment = Alignment.Center) {
+                    // Outer pulsing glow halo (only when protected)
+                    if (isProtected) {
+                        Box(
+                            modifier = Modifier
+                                .size(112.dp)
+                                .graphicsLayer {
+                                    scaleX = haloScale2
+                                    scaleY = haloScale2
+                                }
+                                .clip(CircleShape)
+                                .background(accent.copy(alpha = 0.08f))
+                        )
+                    }
+                    // Inner pulsing halo
+                    Box(
+                        modifier = Modifier
+                            .size(112.dp)
+                            .graphicsLayer {
+                                val s = if (isProtected) haloScale1 else 1f
+                                scaleX = s
+                                scaleY = s
+                            }
+                            .clip(CircleShape)
+                            .background(accent.copy(alpha = if (isProtected) 0.16f else 0.10f))
+                    )
+                    if (isProtected) {
+                        FloatingParticles(
+                            isProtected = true,
+                            modifier = Modifier.size(140.dp)
+                        )
+                    }
                     LiquidGlassIconButton(
                         onClick = { onToggleProtection(!isProtected) },
-                        accent = if (isProtected) ClearColors.green else ClearColors.muted,
-                        contentColor = if (isProtected) ClearColors.green else ClearColors.muted,
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                        },
+                        accent = accent,
+                        contentColor = accent,
                         size = 94.dp
                     ) {
                         Icon(
@@ -103,7 +165,7 @@ fun DashboardScreen(
                     text = if (isProtected) "DNS SHIELD ACTIVE" else "DNS SHIELD PAUSED",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (isProtected) ClearColors.green else ClearColors.muted
+                    color = accent
                 )
                 Text(
                     text = if (isProtected) "Tap to pause blocking" else "Tap to resume DNS blocking",
@@ -152,6 +214,8 @@ fun DashboardScreen(
         GlassCard(
             modifier = Modifier.fillMaxWidth()
         ) {
+            val context = LocalContext.current
+            val prefs = remember { PreferenceKeys.prefs(context) }
             Column(
                 modifier = Modifier
                     .padding(20.dp)
@@ -167,9 +231,24 @@ fun DashboardScreen(
                 StatusRow("DNS Filtering", if (isProtected) "Active" else "Paused")
                 StatusRow("Threat Shield", if (scamShieldEnabled) "On-device (scam + DGA)" else "Off")
                 StatusRow("Secure DNS", if (dohEnabled) "DoH encrypted" else "Classic (plaintext)")
+                StatusRow(
+                    "Bypass Guard",
+                    if (prefs.getBoolean(
+                            PreferenceKeys.KEY_BYPASS_GUARD_ENABLED,
+                            PreferenceKeys.DEFAULT_BYPASS_GUARD_ENABLED
+                        )
+                    ) "Blocking DNS sidesteps" else "Off"
+                )
+                StatusRow(
+                    "List Updates",
+                    if (prefs.getBoolean(
+                            PreferenceKeys.KEY_AUTO_UPDATE_ENABLED,
+                            PreferenceKeys.DEFAULT_AUTO_UPDATE_ENABLED
+                        )
+                    ) "Automatic (daily)" else "Manual only"
+                )
                 StatusRow("Traffic Route", "DNS only")
                 StatusRow("Telemetry", "None")
-                StatusRow("Background Jobs", "None")
             }
         }
     }
@@ -191,9 +270,13 @@ private fun StatGlassCard(
         ) {
             Text(
                 text = value,
-                fontSize = 26.sp,
+                fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = ClearColors.text
+                style = androidx.compose.ui.text.TextStyle(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(ClearColors.text, accent)
+                    )
+                )
             )
             Spacer(Modifier.height(2.dp))
             Text(
@@ -205,9 +288,13 @@ private fun StatGlassCard(
             Box(
                 modifier = Modifier
                     .height(3.dp)
-                    .fillMaxWidth(0.6f)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(accent.copy(alpha = 0.65f))
+                    .fillMaxWidth(0.5f)
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            listOf(accent, accent.copy(alpha = 0.15f))
+                        )
+                    )
             )
         }
     }
@@ -247,5 +334,76 @@ private fun formatCompact(value: Long): String {
         value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000f)
         value >= 10_000 -> "${value / 1000}k"
         else -> value.toString()
+    }
+}
+
+@Composable
+private fun FloatingParticles(isProtected: Boolean, modifier: Modifier = Modifier) {
+    if (!isProtected) return
+
+    val infiniteTransition = rememberInfiniteTransition(label = "particles")
+
+    val p1Progress by infiniteTransition.animateFloat(
+        initialValue = 1f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "p1"
+    )
+    val p2Progress by infiniteTransition.animateFloat(
+        initialValue = 1f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3400, delayMillis = 400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "p2"
+    )
+    val p3Progress by infiniteTransition.animateFloat(
+        initialValue = 1f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, delayMillis = 800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "p3"
+    )
+    val p4Progress by infiniteTransition.animateFloat(
+        initialValue = 1f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, delayMillis = 1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "p4"
+    )
+
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val activeColor = ClearColors.green
+
+        // Particle 1 (left side)
+        drawCircle(
+            color = activeColor.copy(alpha = p1Progress * 0.25f),
+            radius = 5.dp.toPx(),
+            center = Offset(w * 0.24f, h * 0.15f + h * 0.7f * p1Progress)
+        )
+        // Particle 2 (right-middle)
+        drawCircle(
+            color = activeColor.copy(alpha = p2Progress * 0.20f),
+            radius = 4.dp.toPx(),
+            center = Offset(w * 0.76f, h * 0.15f + h * 0.7f * p2Progress)
+        )
+        // Particle 3 (middle-left)
+        drawCircle(
+            color = activeColor.copy(alpha = p3Progress * 0.28f),
+            radius = 7.dp.toPx(),
+            center = Offset(w * 0.36f, h * 0.15f + h * 0.7f * p3Progress)
+        )
+        // Particle 4 (middle-right)
+        drawCircle(
+            color = activeColor.copy(alpha = p4Progress * 0.22f),
+            radius = 5.dp.toPx(),
+            center = Offset(w * 0.64f, h * 0.15f + h * 0.7f * p4Progress)
+        )
     }
 }

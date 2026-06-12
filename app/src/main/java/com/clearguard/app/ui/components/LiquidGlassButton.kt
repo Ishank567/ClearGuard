@@ -32,9 +32,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.clearguard.app.ui.theme.ClearColors
+import com.clearguard.app.ui.theme.ClearDesign
 
 /**
- * iOS-style liquid glass button.
+ * iOS-style liquid glass button. Shape and motion defaults come from [ClearDesign];
+ * the accent color follows the active [ClearColors] palette.
  */
 @Composable
 fun LiquidGlassButton(
@@ -43,7 +45,7 @@ fun LiquidGlassButton(
     enabled: Boolean = true,
     accent: Color = ClearColors.green,
     contentColor: Color = ClearColors.green,
-    cornerRadius: Dp = 22.dp,
+    cornerRadius: Dp = ClearDesign.buttonCorner,
     contentPadding: PaddingValues = PaddingValues(horizontal = 22.dp, vertical = 12.dp),
     content: @Composable RowScope.() -> Unit
 ) {
@@ -54,18 +56,18 @@ fun LiquidGlassButton(
     val resolvedContentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.55f)
 
     val scale by animateFloatAsState(
-        targetValue = if (active) 0.955f else 1f,
-        animationSpec = tween(140),
+        targetValue = if (active) ClearDesign.buttonPressedScale else 1f,
+        animationSpec = tween(ClearDesign.pressFeedbackMs),
         label = "liquidScale"
     )
     val glow by animateFloatAsState(
         targetValue = if (active) 1f else 0f,
-        animationSpec = tween(160),
+        animationSpec = tween(ClearDesign.pressFeedbackMs),
         label = "liquidGlow"
     )
     val elevation by animateDpAsState(
-        targetValue = if (active) 4.dp else 12.dp,
-        animationSpec = tween(160),
+        targetValue = if (active) ClearDesign.buttonPressedElevation else ClearDesign.buttonElevation,
+        animationSpec = tween(ClearDesign.pressFeedbackMs),
         label = "liquidElevation"
     )
 

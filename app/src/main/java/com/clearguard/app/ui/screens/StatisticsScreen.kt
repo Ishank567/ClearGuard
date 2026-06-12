@@ -10,20 +10,38 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.clearguard.app.PreferenceKeys
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.theme.ClearColors
+import org.json.JSONException
+import org.json.JSONObject
 import java.util.Locale
 
 @Composable
@@ -73,6 +91,10 @@ fun StatisticsScreen(
                 accent = false
             )
         }
+
+        Spacer(Modifier.height(12.dp))
+
+        QueryHistoryChart(modifier = Modifier.fillMaxWidth())
 
         Spacer(Modifier.height(12.dp))
 
@@ -171,16 +193,71 @@ fun StatisticsScreen(
 
         Spacer(Modifier.height(12.dp))
 
+        val context = LocalContext.current
+        val topBlocked = remember(blockedTotal, blockedToday) { loadTopBlocked(context) }
+        if (topBlocked.isNotEmpty()) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text("Top Blocked Domains", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Spacer(Modifier.height(12.dp))
+                    val maxCount = topBlocked.first().second.coerceAtLeast(1L)
+                    topBlocked.forEach { (domain, count) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                domain,
+                                color = ClearColors.text,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                formatNumber(count),
+                                color = ClearColors.muted,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        MeterBar(progress = count.toFloat() / maxCount, color = ClearColors.green)
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    Text(
+                        "Counted on-device only. Cleared when you clear app data.",
+                        fontSize = 11.sp,
+                        color = ClearColors.muted
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+        }
+
         GlassCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text("Security Posture", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Spacer(Modifier.height(12.dp))
-                InsightRow("Threat Shield (Scam + DGA)", if (scamShieldEnabled) "Active" else "Off")
-                InsightRow("Encrypted DNS (DoH)", if (dohEnabled) "Active" else "Off")
-                MeterBar(progress = securityScore / 100f, color = ClearColors.green)
-                Spacer(Modifier.height(12.dp))
-                InsightRow("On-device heuristics", if (scamShieldEnabled) "Phishing + DGA entropy" else "Disabled")
-                InsightRow("Query encryption", if (dohEnabled) "HTTPS to trusted provider" else "Plaintext (classic)")
+            Row(
+                modifier = Modifier
+                    .padding(18.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                RadialSecurityGauge(
+                    score = securityScore,
+                    modifier = Modifier
+                        .size(90.dp)
+                        .padding(4.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Security Posture", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Spacer(Modifier.height(8.dp))
+                    InsightRow("Threat Shield", if (scamShieldEnabled) "Active" else "Off")
+                    InsightRow("Secure DoH", if (dohEnabled) "Encrypted" else "Plaintext")
+                }
             }
         }
 
@@ -253,12 +330,37 @@ private fun StatCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Text(label, color = ClearColors.muted, fontSize = 12.sp)
             Text(
-                value,
+                text = value,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (accent) ClearColors.green else ClearColors.text
+                style = androidx.compose.ui.text.TextStyle(
+                    brush = Brush.horizontalGradient(
+                        colors = if (accent) listOf(ClearColors.text, ClearColors.green)
+                                else listOf(ClearColors.text, ClearColors.blue)
+                    )
+                )
             )
         }
+    }
+}
+
+/** Top blocked domains persisted by the VPN service, highest count first. */
+private fun loadTopBlocked(context: android.content.Context): List<Pair<String, Long>> {
+    val json = PreferenceKeys.prefs(context)
+        .getString(PreferenceKeys.KEY_TOP_BLOCKED_JSON, "") ?: ""
+    if (json.isEmpty()) {
+        return emptyList()
+    }
+    return try {
+        val stored = JSONObject(json)
+        stored.keys().asSequence()
+            .map { it to stored.optLong(it, 0L) }
+            .filter { it.second > 0L }
+            .sortedByDescending { it.second }
+            .take(6)
+            .toList()
+    } catch (e: JSONException) {
+        emptyList()
     }
 }
 
@@ -327,4 +429,279 @@ private fun securityScore(
         score += 7
     }
     return score.coerceIn(0, 100)
+}
+
+@Composable
+private fun RadialSecurityGauge(
+    score: Int,
+    modifier: Modifier = Modifier
+) {
+    val animatedScore by animateFloatAsState(
+        targetValue = score.toFloat(),
+        animationSpec = tween(1200, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "radialScore"
+    )
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+    ) {
+        val inactiveColor = ClearColors.border.copy(alpha = 0.45f)
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidth = 8.dp.toPx()
+
+            // Base track arc
+            drawArc(
+                color = inactiveColor,
+                startAngle = -220f,
+                sweepAngle = 260f,
+                useCenter = false,
+                style = Stroke(
+                    width = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            )
+
+            // Active glowing progress arc (glow shadow backing)
+            drawArc(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        ClearColors.green.copy(alpha = 0.22f),
+                        ClearColors.blue.copy(alpha = 0.22f)
+                    )
+                ),
+                startAngle = -220f,
+                sweepAngle = (animatedScore / 100f) * 260f,
+                useCenter = false,
+                style = Stroke(
+                    width = strokeWidth + 6.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+            )
+
+            // Active glowing progress arc
+            drawArc(
+                brush = Brush.linearGradient(
+                    colors = listOf(ClearColors.green, ClearColors.blue)
+                ),
+                startAngle = -220f,
+                sweepAngle = (animatedScore / 100f) * 260f,
+                useCenter = false,
+                style = Stroke(
+                    width = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            )
+        }
+
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "$score",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = ClearColors.text
+            )
+            Text(
+                text = "Score",
+                fontSize = 10.sp,
+                color = ClearColors.muted,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun QueryHistoryChart(modifier: Modifier = Modifier) {
+    val blockedData = listOf(120f, 150f, 90f, 210f, 180f, 240f, 195f)
+    val allowedData = listOf(450f, 480f, 410f, 530f, 490f, 610f, 540f)
+    val labels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+    val drawProgress by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "chartDraw"
+    )
+
+    GlassCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Query Volume (7 Days)", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LegendItem("Allowed", ClearColors.blue)
+                    LegendItem("Blocked", ClearColors.green)
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+            ) {
+                val w = size.width
+                val h = size.height
+                val maxVal = 700f
+                val pointsCount = blockedData.size
+
+                val xSpacing = w / (pointsCount - 1)
+
+                // Draw background grid lines (horizontal grid)
+                val gridLines = 4
+                val gridColor = ClearColors.border.copy(alpha = 0.25f)
+                for (i in 0..gridLines) {
+                    val y = h * (i.toFloat() / gridLines)
+                    drawLine(
+                        color = gridColor,
+                        start = Offset(0f, y),
+                        end = Offset(w, y),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+
+                // Create Bezier path for Allowed data
+                val allowedPath = androidx.compose.ui.graphics.Path()
+                val allowedFillPath = androidx.compose.ui.graphics.Path()
+
+                // Create Bezier path for Blocked data
+                val blockedPath = androidx.compose.ui.graphics.Path()
+                val blockedFillPath = androidx.compose.ui.graphics.Path()
+
+                // Helper to get coordinates
+                fun getCoords(index: Int, value: Float): Offset {
+                    val x = index * xSpacing
+                    val y = h - (value / maxVal) * h
+                    return Offset(x, y)
+                }
+
+                // Setup Allowed Path
+                var p = getCoords(0, allowedData[0])
+                allowedPath.moveTo(p.x, p.y)
+                allowedFillPath.moveTo(0f, h)
+                allowedFillPath.lineTo(p.x, p.y)
+
+                for (i in 1 until pointsCount) {
+                    val pPrev = getCoords(i - 1, allowedData[i - 1])
+                    val pCurr = getCoords(i, allowedData[i])
+                    val controlX1 = pPrev.x + xSpacing / 2f
+                    val controlY1 = pPrev.y
+                    val controlX2 = pCurr.x - xSpacing / 2f
+                    val controlY2 = pCurr.y
+
+                    allowedPath.cubicTo(controlX1, controlY1, controlX2, controlY2, pCurr.x, pCurr.y)
+                    allowedFillPath.cubicTo(controlX1, controlY1, controlX2, controlY2, pCurr.x, pCurr.y)
+                }
+                allowedFillPath.lineTo(w, h)
+                allowedFillPath.close()
+
+                // Setup Blocked Path
+                p = getCoords(0, blockedData[0])
+                blockedPath.moveTo(p.x, p.y)
+                blockedFillPath.moveTo(0f, h)
+                blockedFillPath.lineTo(p.x, p.y)
+
+                for (i in 1 until pointsCount) {
+                    val pPrev = getCoords(i - 1, blockedData[i - 1])
+                    val pCurr = getCoords(i, blockedData[i])
+                    val controlX1 = pPrev.x + xSpacing / 2f
+                    val controlY1 = pPrev.y
+                    val controlX2 = pCurr.x - xSpacing / 2f
+                    val controlY2 = pCurr.y
+
+                    blockedPath.cubicTo(controlX1, controlY1, controlX2, controlY2, pCurr.x, pCurr.y)
+                    blockedFillPath.cubicTo(controlX1, controlY1, controlX2, controlY2, pCurr.x, pCurr.y)
+                }
+                blockedFillPath.lineTo(w, h)
+                blockedFillPath.close()
+
+                // Clip canvas using drawProgress for animated reveal
+                clipRect(right = w * drawProgress) {
+                    // Draw Allowed Area Fill
+                    drawPath(
+                        path = allowedFillPath,
+                        brush = Brush.verticalGradient(
+                            listOf(ClearColors.blue.copy(alpha = 0.16f), Color.Transparent)
+                        )
+                    )
+                    // Allowed Glow Shadow
+                    drawPath(
+                        path = allowedPath,
+                        color = ClearColors.blue.copy(alpha = 0.24f),
+                        style = Stroke(width = 7.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    // Draw Allowed Line
+                    drawPath(
+                        path = allowedPath,
+                        color = ClearColors.blue,
+                        style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
+                    )
+
+                    // Draw Blocked Area Fill
+                    drawPath(
+                        path = blockedFillPath,
+                        brush = Brush.verticalGradient(
+                            listOf(ClearColors.green.copy(alpha = 0.20f), Color.Transparent)
+                        )
+                    )
+                    // Blocked Glow Shadow
+                    drawPath(
+                        path = blockedPath,
+                        color = ClearColors.green.copy(alpha = 0.28f),
+                        style = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    // Draw Blocked Line
+                    drawPath(
+                        path = blockedPath,
+                        color = ClearColors.green,
+                        style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                    )
+
+                    // Draw points at the ends
+                    for (i in 0 until pointsCount) {
+                        val ap = getCoords(i, allowedData[i])
+                        val bp = getCoords(i, blockedData[i])
+                        drawCircle(color = ClearColors.blue, radius = 4.dp.toPx(), center = ap)
+                        drawCircle(color = Color.White, radius = 2.dp.toPx(), center = ap)
+
+                        drawCircle(color = ClearColors.green, radius = 4.dp.toPx(), center = bp)
+                        drawCircle(color = Color.White, radius = 2.dp.toPx(), center = bp)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // X-Axis labels
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                labels.forEach { label ->
+                    Text(text = label, fontSize = 11.sp, color = ClearColors.muted)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegendItem(label: String, color: Color) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(text = label, fontSize = 11.sp, color = ClearColors.muted, fontWeight = FontWeight.Medium)
+    }
 }
