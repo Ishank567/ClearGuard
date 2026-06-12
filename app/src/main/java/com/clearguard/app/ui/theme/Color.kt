@@ -39,7 +39,9 @@ data class ClearPalette(
     /** Warnings and medium threat scores. */
     val warning: Color,
     /** Dark translucent glass for contrast elements. */
-    val glassDark: Color
+    val glassDark: Color,
+    /** Whether to use translucent glass layers or solid panels. */
+    val useGlass: Boolean
 )
 
 object ClearPalettes {
@@ -59,26 +61,28 @@ object ClearPalettes {
         success = Color(0xFF0D9488),
         danger = Color(0xFFF43F5E),
         warning = Color(0xFFF59E0B),
-        glassDark = Color(0xFF0F172A).copy(alpha = 0.70f)
+        glassDark = Color(0xFF0F172A).copy(alpha = 0.70f),
+        useGlass = true
     )
 
-    /** Deep navy dark variant; accents brightened to keep contrast on dark glass. */
+    /** Red & Black theme with no glass and glowing crimson/red auras. */
     val dark = ClearPalette(
-        bg = Color(0xFF030712),
-        panel = Color(0xFF090D16),
-        text = Color(0xFFF3F4F6),
-        muted = Color(0xFF9CA3AF),
-        green = Color(0xFF10B981),
-        blue = Color(0xFF06B6D4),
-        border = Color(0xFF1F2937),
-        glass = Color(0xFF0B132B).copy(alpha = 0.65f),
-        glassBorder = Color.White.copy(alpha = 0.08f),
-        glassHighlight = Color.White.copy(alpha = 0.05f),
-        glassShadow = Color.Black.copy(alpha = 0.60f),
-        success = Color(0xFF10B981),
-        danger = Color(0xFFEF4444),
-        warning = Color(0xFFF59E0B),
-        glassDark = Color(0xFF030712).copy(alpha = 0.85f)
+        bg = Color(0xFF000000),
+        panel = Color(0xFF0C0707),
+        text = Color(0xFFFFFFFF),
+        muted = Color(0xFF8C8282),
+        green = Color(0xFFFF3333),
+        blue = Color(0xFFFF5555),
+        border = Color(0xFF281010),
+        glass = Color(0xFF0C0707),
+        glassBorder = Color(0xFFFF2222).copy(alpha = 0.28f),
+        glassHighlight = Color.Transparent,
+        glassShadow = Color(0xFFFF0000).copy(alpha = 0.35f),
+        success = Color(0xFFFF3333),
+        danger = Color(0xFFFF3333),
+        warning = Color(0xFFFF8800),
+        glassDark = Color(0xFF050303),
+        useGlass = false
     )
 }
 
@@ -111,4 +115,5 @@ object ClearColors {
     val danger: Color get() = palette.value.danger
     val warning: Color get() = palette.value.warning
     val glassDark: Color get() = palette.value.glassDark
+    val useGlass: Boolean get() = palette.value.useGlass
 }

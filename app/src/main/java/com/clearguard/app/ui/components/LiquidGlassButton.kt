@@ -83,27 +83,43 @@ fun LiquidGlassButton(
             .shadow(
                 elevation = elevation,
                 shape = shape,
-                ambientColor = accent.copy(alpha = 0.25f),
-                spotColor = Color.Black.copy(alpha = 0.28f)
+                ambientColor = if (ClearColors.useGlass) accent.copy(alpha = 0.25f) else ClearColors.green.copy(alpha = 0.35f),
+                spotColor = Color.Black.copy(alpha = if (ClearColors.useGlass) 0.28f else 0.50f)
             )
             .clip(shape)
-            // Frosted, lightly accent-tinted glass body.
+            // Frosted, lightly accent-tinted glass body (or solid dark body)
             .background(
-                brush = Brush.verticalGradient(
-                    0f to Color.White.copy(alpha = 0.55f),
-                    0.55f to accent.copy(alpha = 0.16f),
-                    1f to accent.copy(alpha = 0.10f)
-                ),
+                brush = if (ClearColors.useGlass) {
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.55f),
+                        0.55f to accent.copy(alpha = 0.16f),
+                        1f to accent.copy(alpha = 0.10f)
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        0f to accent.copy(alpha = 0.20f),
+                        0.50f to Color(0xFF0F0707),
+                        1f to Color(0xFF050202)
+                    )
+                },
                 shape = shape
             )
-            // Bright rim that catches light along the top edge (liquid glass refraction).
+            // Bright rim that catches light along the top edge (liquid glass refraction or glowing aura)
             .border(
                 width = 1.5.dp,
-                brush = Brush.verticalGradient(
-                    0f to Color.White.copy(alpha = 0.9f),
-                    0.5f to Color.White.copy(alpha = 0.35f),
-                    1f to accent.copy(alpha = 0.28f)
-                ),
+                brush = if (ClearColors.useGlass) {
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.9f),
+                        0.5f to Color.White.copy(alpha = 0.35f),
+                        1f to accent.copy(alpha = 0.28f)
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        0f to ClearColors.green.copy(alpha = 0.60f),
+                        0.5f to ClearColors.green.copy(alpha = 0.25f),
+                        1f to Color.Transparent
+                    )
+                },
                 shape = shape
             )
             .clickable(
@@ -114,34 +130,51 @@ fun LiquidGlassButton(
                 onClick = onClick
             )
     ) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clip(shape)
-                .background(
-                    brush = Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.55f + 0.30f * glow),
-                        0.35f to Color.White.copy(alpha = 0.0f),
-                        0.85f to Color.Black.copy(alpha = 0.02f),
-                        1f to Color.Black.copy(alpha = 0.07f)
+        if (ClearColors.useGlass) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(shape)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            0f to Color.White.copy(alpha = 0.55f + 0.30f * glow),
+                            0.35f to Color.White.copy(alpha = 0.0f),
+                            0.85f to Color.Black.copy(alpha = 0.02f),
+                            1f to Color.Black.copy(alpha = 0.07f)
+                        )
                     )
-                )
-        )
+            )
 
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .padding(1.dp)
-                .clip(shape)
-                .background(
-                    brush = Brush.horizontalGradient(
-                        0f to Color.White.copy(alpha = 0.36f),
-                        0.38f to Color.Transparent,
-                        0.68f to Color.White.copy(alpha = 0.18f),
-                        1f to Color.Transparent
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(1.dp)
+                    .clip(shape)
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            0f to Color.White.copy(alpha = 0.36f),
+                            0.38f to Color.Transparent,
+                            0.68f to Color.White.copy(alpha = 0.18f),
+                            1f to Color.Transparent
+                        )
                     )
-                )
-        )
+            )
+        } else {
+            // Physical 3D button details: top highlight and bottom shadow, responsive to glow / press
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(shape)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            0f to Color.White.copy(alpha = 0.06f + 0.08f * glow),
+                            0.15f to Color.Transparent,
+                            0.80f to Color.Transparent,
+                            1f to Color.Black.copy(alpha = 0.35f)
+                        )
+                    )
+            )
+        }
 
         CompositionLocalProvider(LocalContentColor provides resolvedContentColor) {
             Row(

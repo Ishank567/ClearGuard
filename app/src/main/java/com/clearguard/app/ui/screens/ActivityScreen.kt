@@ -182,7 +182,7 @@ fun ActivityScreen(isProtected: Boolean) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(ClearColors.glass.copy(alpha = 0.40f)),
+                        .background(if (ClearColors.useGlass) ClearColors.glass.copy(alpha = 0.40f) else Color(0xFF0F0707)),
                     placeholder = { Text("Search domain...", color = ClearColors.muted, fontSize = 14.sp) },
                     leadingIcon = {
                         Icon(
@@ -206,7 +206,7 @@ fun ActivityScreen(isProtected: Boolean) {
                     },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = ClearColors.blue.copy(alpha = 0.4f),
+                        focusedBorderColor = ClearColors.green.copy(alpha = 0.6f),
                         unfocusedBorderColor = ClearColors.border.copy(alpha = 0.25f),
                         focusedContainerColor = Color.Transparent,
                         unfocusedContainerColor = Color.Transparent,
@@ -238,7 +238,7 @@ fun ActivityScreen(isProtected: Boolean) {
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) chipColor.copy(alpha = bgAlpha) else ClearColors.glass.copy(alpha = 0.4f))
+                                .background(if (isSelected) chipColor.copy(alpha = bgAlpha) else (if (ClearColors.useGlass) ClearColors.glass.copy(alpha = 0.4f) else Color(0xFF0F0707)))
                                 .border(1.dp, if (isSelected) chipColor.copy(alpha = borderAlpha) else ClearColors.border.copy(alpha = borderAlpha), RoundedCornerShape(12.dp))
                                 .clickable { filterStatus = chip }
                                 .padding(vertical = 8.dp),

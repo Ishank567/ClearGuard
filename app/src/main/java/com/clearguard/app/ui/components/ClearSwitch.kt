@@ -36,7 +36,7 @@ fun ClearSwitch(
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val activeTrackColor = ClearColors.green
-    val inactiveTrackColor = ClearColors.border.copy(alpha = 0.65f)
+    val inactiveTrackColor = if (ClearColors.useGlass) ClearColors.border.copy(alpha = 0.65f) else Color(0xFF1C1313)
     
     val trackColor by animateColorAsState(
         targetValue = if (checked) activeTrackColor else inactiveTrackColor,

@@ -47,48 +47,74 @@ fun GlassCard(
                 elevation = elevation,
                 shape = shape,
                 ambientColor = ClearColors.glassShadow,
-                spotColor = Color.Black.copy(alpha = 0.22f)
+                spotColor = if (ClearColors.useGlass) Color.Black.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.45f)
             )
             .clip(shape)
-            // Main frosted glass layer
+            // Main frosted glass layer (or solid dark panel if useGlass is false)
             .background(
-                color = ClearColors.glass.copy(alpha = glassAlpha),
+                color = if (ClearColors.useGlass) ClearColors.glass.copy(alpha = glassAlpha) else ClearColors.glass,
                 shape = shape
             )
-            // Glass edge / refraction border
+            // Glass edge / refraction border (or 3D red aura border)
             .border(
-                width = 1.25.dp,
-                brush = if (ClearColors.glassBorder.alpha > 0.2f) {
-                    Brush.verticalGradient(
-                        0f to ClearColors.glassBorder,
-                        0.4f to ClearColors.glassBorder.copy(alpha = ClearColors.glassBorder.alpha * 0.5f),
-                        1f to Color.Black.copy(alpha = 0.03f)
-                    )
+                width = if (ClearColors.useGlass) 1.25.dp else 1.5.dp,
+                brush = if (ClearColors.useGlass) {
+                    if (ClearColors.glassBorder.alpha > 0.2f) {
+                        Brush.verticalGradient(
+                            0f to ClearColors.glassBorder,
+                            0.4f to ClearColors.glassBorder.copy(alpha = ClearColors.glassBorder.alpha * 0.5f),
+                            1f to Color.Black.copy(alpha = 0.03f)
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            0f to Color.White.copy(alpha = 0.15f),
+                            0.5f to ClearColors.green.copy(alpha = 0.18f),
+                            1f to Color.Black.copy(alpha = 0.35f)
+                        )
+                    }
                 } else {
                     Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.15f),
-                        0.5f to ClearColors.green.copy(alpha = 0.18f),
-                        1f to Color.Black.copy(alpha = 0.35f)
+                        0f to ClearColors.green.copy(alpha = 0.40f),
+                        0.25f to ClearColors.green.copy(alpha = 0.10f),
+                        0.75f to Color.Transparent,
+                        1f to ClearColors.green.copy(alpha = 0.05f)
                     )
                 },
                 shape = shape
             )
     ) {
         // Inner 3D bevel / specular highlight layer (top shine + bottom soft shadow)
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clip(shape)
-                .background(
-                    brush = Brush.verticalGradient(
-                        0f to ClearColors.glassHighlight,
-                        0.18f to Color.White.copy(alpha = 0.08f),
-                        0.42f to Color.Transparent,
-                        0.78f to Color.Black.copy(alpha = 0.035f),
-                        1f to Color.Black.copy(alpha = 0.07f)
+        if (ClearColors.useGlass) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(shape)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            0f to ClearColors.glassHighlight,
+                            0.18f to Color.White.copy(alpha = 0.08f),
+                            0.42f to Color.Transparent,
+                            0.78f to Color.Black.copy(alpha = 0.035f),
+                            1f to Color.Black.copy(alpha = 0.07f)
+                        )
                     )
-                )
-        )
+            )
+        } else {
+            // Physical 3D dark bevel highlights
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(shape)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            0f to Color.White.copy(alpha = 0.03f),
+                            0.10f to Color.Transparent,
+                            0.90f to Color.Transparent,
+                            1f to Color.Black.copy(alpha = 0.45f)
+                        )
+                    )
+            )
+        }
 
         // Actual content. Text and icons that do not set an explicit color inherit
         // the palette's text color, so cards stay readable in both themes.

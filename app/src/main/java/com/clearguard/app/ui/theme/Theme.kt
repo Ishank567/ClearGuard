@@ -186,7 +186,7 @@ fun ClearMeshBackground(darkTheme: Boolean) {
             )
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF8B5CF6).copy(alpha = 0.12f), Color.Transparent),
+                    colors = listOf(Color(0xFF5C0E0E).copy(alpha = 0.12f), Color.Transparent),
                     radius = w * 0.75f
                 ),
                 center = Offset(w * (xOffset3 / 100f), h * (yOffset3 / 100f)),
