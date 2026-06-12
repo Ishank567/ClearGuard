@@ -238,7 +238,7 @@ fun BrowserScreen() {
             )
 
             // Alert warning overlay for Fake Download attempts or scam links
-            AnimatedVisibility(
+            androidx.compose.animation.AnimatedVisibility(
                 visible = fakeDownloadBlockedAlert,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
