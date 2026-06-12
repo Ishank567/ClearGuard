@@ -297,9 +297,35 @@ fun DashboardScreen(
                     color = ClearColors.text
                 )
                 Spacer(Modifier.height(12.dp))
+                val threatShieldStatus = when (currentMode) {
+                    "strict" -> "Strict (Ads, Social, Fingerprint, Scam)"
+                    "family" -> "Family (Adult, Gambling, Short Video)"
+                    else -> if (scamShieldEnabled) {
+                        "On-device (scam + DGA)"
+                    } else {
+                        "Basic (Ads + Trackers)"
+                    }
+                }
+                val secureDnsStatus = when (currentMode) {
+                    "gaming" -> "Cloudflare DoH (Enforced)"
+                    "battery" -> "Classic (plaintext) (Enforced)"
+                    else -> if (dohEnabled) "DoH encrypted" else "Classic (plaintext)"
+                }
+                val cacheTtlSeconds = when (currentMode) {
+                    "gaming" -> 1800
+                    "battery" -> 3600
+                    else -> prefs.getInt(PreferenceKeys.KEY_CACHE_TTL_SECONDS, PreferenceKeys.DEFAULT_CACHE_TTL_SECONDS)
+                }
+                val cacheTtlText = if (cacheTtlSeconds >= 3600) {
+                    "${cacheTtlSeconds / 3600} hr cache"
+                } else {
+                    "${cacheTtlSeconds / 60} min cache"
+                }
+
                 StatusRow("DNS Filtering", if (isProtected) "Active" else "Paused")
-                StatusRow("Threat Shield", if (scamShieldEnabled) "On-device (scam + DGA)" else "Off")
-                StatusRow("Secure DNS", if (dohEnabled) "DoH encrypted" else "Classic (plaintext)")
+                StatusRow("Threat Shield", threatShieldStatus)
+                StatusRow("Secure DNS", secureDnsStatus)
+                StatusRow("Local Cache", cacheTtlText)
                 StatusRow(
                     "Bypass Guard",
                     if (prefs.getBoolean(
@@ -316,7 +342,6 @@ fun DashboardScreen(
                         )
                     ) "Automatic (daily)" else "Manual only"
                 )
-                StatusRow("Traffic Route", "DNS only")
                 StatusRow("Telemetry", "None")
             }
         }
