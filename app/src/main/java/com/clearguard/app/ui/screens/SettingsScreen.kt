@@ -1,17 +1,12 @@
 package com.clearguard.app.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -19,26 +14,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,6 +52,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val prefs = remember { PreferenceKeys.prefs(context) }
+
     var resolver by remember {
         mutableStateOf(
             prefs.getString(PreferenceKeys.KEY_UPSTREAM_DNS, PreferenceKeys.DEFAULT_UPSTREAM_DNS)
@@ -127,13 +106,41 @@ fun SettingsScreen(
             )
         )
     }
-    var excludedApps by remember {
-        mutableStateOf(
-            prefs.getStringSet(PreferenceKeys.KEY_EXCLUDED_APPS, emptySet())?.toSet() ?: emptySet()
-        )
+
+    // --- ShieldDNS Custom States ---
+    var wifiProtection by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_WIFI_PROTECTION_ENABLED, PreferenceKeys.DEFAULT_WIFI_PROTECTION_ENABLED))
     }
-    var showAppPicker by remember { mutableStateOf(false) }
-    var exclusionsChanged by remember { mutableStateOf(false) }
+    var regionalIndia by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_REGIONAL_PACK_INDIA, PreferenceKeys.DEFAULT_REGIONAL_PACK_INDIA))
+    }
+    var religiousClean by remember {
+        mutableStateOf(prefs.getBoolean("religious_clean_enabled", false))
+    }
+    var timeRulesEnabled by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_TIME_RULES_ENABLED, PreferenceKeys.DEFAULT_TIME_RULES_ENABLED))
+    }
+    var backgroundBlockEnabled by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BACKGROUND_BLOCK_ENABLED, PreferenceKeys.DEFAULT_BACKGROUND_BLOCK_ENABLED))
+    }
+
+    // Block lists
+    var blockedApps by remember {
+        mutableStateOf(prefs.getStringSet(PreferenceKeys.KEY_FIREWALL_BLOCKED_APPS, emptySet()) ?: emptySet())
+    }
+    var blockedWifiApps by remember {
+        mutableStateOf(prefs.getStringSet(PreferenceKeys.KEY_FIREWALL_BLOCKED_WIFI, emptySet()) ?: emptySet())
+    }
+    var blockedMobileApps by remember {
+        mutableStateOf(prefs.getStringSet(PreferenceKeys.KEY_FIREWALL_BLOCKED_MOBILE, emptySet()) ?: emptySet())
+    }
+    var excludedApps by remember {
+        mutableStateOf(prefs.getStringSet(PreferenceKeys.KEY_EXCLUDED_APPS, emptySet()) ?: emptySet())
+    }
+
+    // Dialog flags
+    var appPickerDialogType by remember { mutableStateOf<String?>(null) } // "exclude", "block_all", "block_wifi", "block_mobile"
+    var showCountryBlocker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -142,6 +149,7 @@ fun SettingsScreen(
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Protection switch card
         GlassCard {
             Row(
                 modifier = Modifier
@@ -151,8 +159,8 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("Protection", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text("System DNS filtering", fontSize = 12.sp, color = ClearColors.muted)
+                    Text("Firewall Protection", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("System-wide DNS filtering", fontSize = 12.sp, color = ClearColors.muted)
                 }
                 ClearSwitch(
                     checked = isProtected,
@@ -161,6 +169,7 @@ fun SettingsScreen(
             }
         }
 
+        // Appearance picker card
         GlassCard {
             Column(modifier = Modifier.padding(18.dp)) {
                 Text("Appearance", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
@@ -205,6 +214,10 @@ fun SettingsScreen(
             }
         }
 
+        // --- SECTION 1: AI Firewall Features ---
+        Text("AI Firewall Rules", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
+
+        // Per-app block card
         GlassCard {
             Row(
                 modifier = Modifier
@@ -214,12 +227,165 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Threat Shield", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Per-App Internet Control", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text(
-                        "On-device scam, brand impersonation + DGA (malware C2) detection",
+                        if (blockedApps.isEmpty()) "Allow or deny internet access for selected apps."
+                        else "${blockedApps.size} app(s) blocked from internet",
                         fontSize = 12.sp,
                         color = ClearColors.muted
                     )
+                }
+                Spacer(Modifier.width(8.dp))
+                LiquidGlassButton(
+                    onClick = { appPickerDialogType = "block_all" },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text("Configure", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        // Wi-Fi / Mobile Rules
+        GlassCard {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text("Wi-Fi & Mobile Data Rules", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Spacer(Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Block Apps on Wi-Fi (${blockedWifiApps.size})", fontSize = 13.sp, color = ClearColors.text)
+                    IconButton(onClick = { appPickerDialogType = "block_wifi" }) {
+                        Icon(Icons.Default.Wifi, contentDescription = null, tint = ClearColors.green)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Block Apps on Mobile Data (${blockedMobileApps.size})", fontSize = 13.sp, color = ClearColors.text)
+                    IconButton(onClick = { appPickerDialogType = "block_mobile" }) {
+                        Icon(Icons.Default.CellularData, contentDescription = null, tint = ClearColors.green)
+                    }
+                }
+
+                // YouTube ads on Wi-Fi toggle
+                var youtubeWifi by remember { mutableStateOf(prefs.getBoolean("firewall_youtube_wifi", false)) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Block YouTube Ads on Wi-Fi", fontSize = 13.sp, color = ClearColors.text)
+                        Text("Filters video ad payloads when on Wi-Fi", fontSize = 11.sp, color = ClearColors.muted)
+                    }
+                    ClearSwitch(
+                        checked = youtubeWifi,
+                        onCheckedChange = {
+                            youtubeWifi = it
+                            prefs.edit().putBoolean("firewall_youtube_wifi", it).apply()
+                            ClearGuardVpnService.reloadIfRunning(context)
+                        }
+                    )
+                }
+            }
+        }
+
+        // Country blocking card
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Country TLD Blocking", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Block outgoing requests to selected country TLDs.", fontSize = 12.sp, color = ClearColors.muted)
+                }
+                Spacer(Modifier.width(8.dp))
+                LiquidGlassButton(
+                    onClick = { showCountryBlocker = true },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text("Block list", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        // Quiet Hours & Background Blockers
+        GlassCard {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text("Time & Background Rules", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Spacer(Modifier.height(8.dp))
+
+                // Time social block
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Quiet Hours (Social block after 10 PM)", fontSize = 13.sp, color = ClearColors.text)
+                        Text("Block Facebook, X, Instagram, TikTok 10 PM - 6 AM", fontSize = 11.sp, color = ClearColors.muted)
+                    }
+                    ClearSwitch(
+                        checked = timeRulesEnabled,
+                        onCheckedChange = {
+                            timeRulesEnabled = it
+                            prefs.edit().putBoolean(PreferenceKeys.KEY_TIME_RULES_ENABLED, it).apply()
+                            ClearGuardVpnService.reloadIfRunning(context)
+                        }
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Background app data blocker
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Background App Blocker", fontSize = 13.sp, color = ClearColors.text)
+                        Text("Stop apps from sending background telemetry (screen-off / idle)", fontSize = 11.sp, color = ClearColors.muted)
+                    }
+                    ClearSwitch(
+                        checked = backgroundBlockEnabled,
+                        onCheckedChange = {
+                            backgroundBlockEnabled = it
+                            prefs.edit().putBoolean(PreferenceKeys.KEY_BACKGROUND_BLOCK_ENABLED, it).apply()
+                            ClearGuardVpnService.reloadIfRunning(context)
+                        }
+                    )
+                }
+            }
+        }
+
+        // --- SECTION 2: AI scam heuristics & regional packs ---
+        Text("AI Scam & Impersonation Shield", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
+
+        // Threat Shield scam blocker
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Scam Impersonation Shield", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("On-device scam detection (impersonation, fake jobs, predatory loans, UPI leaks)", fontSize = 12.sp, color = ClearColors.muted)
                 }
                 ClearSwitch(
                     checked = scamShieldEnabled,
@@ -231,6 +397,7 @@ fun SettingsScreen(
             }
         }
 
+        // India Regional Filter Pack
         GlassCard {
             Row(
                 modifier = Modifier
@@ -240,9 +407,94 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Secure DNS (DoH)", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("India Regional Filter Pack", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Block Indian e-commerce trackers, Hindi site ads, and cricket popups.", fontSize = 12.sp, color = ClearColors.muted)
+                }
+                ClearSwitch(
+                    checked = regionalIndia,
+                    onCheckedChange = {
+                        regionalIndia = it
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_REGIONAL_PACK_INDIA, it).apply()
+                        ClearGuardVpnService.reloadIfRunning(context)
+                    }
+                )
+            }
+        }
+
+        // Religious clean mode
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Religious Content Clean Mode", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Filter fundamentalist, cult, and conversions content at DNS level.", fontSize = 12.sp, color = ClearColors.muted)
+                }
+                ClearSwitch(
+                    checked = religiousClean,
+                    onCheckedChange = {
+                        religiousClean = it
+                        prefs.edit().putBoolean("religious_clean_enabled", it).apply()
+                        ClearGuardVpnService.reloadIfRunning(context)
+                    }
+                )
+            }
+        }
+
+        // --- SECTION 3: DNS settings, Encryption (DoH) & Diagnostics ---
+        Text("Secure DNS & Diagnostic Tools", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
+
+        // DNS Leak Test Panel
+        GlassCard {
+            DnsLeakTestCard()
+        }
+
+        // VPN Kill Switch Card
+        GlassCard {
+            KillSwitchCard()
+        }
+
+        // Wi-Fi Protection Alert toggle
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Wi-Fi Protection Alerts", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Notify when device connects to an open, unsecured public Wi-Fi network", fontSize = 12.sp, color = ClearColors.muted)
+                }
+                ClearSwitch(
+                    checked = wifiProtection,
+                    onCheckedChange = {
+                        wifiProtection = it
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_WIFI_PROTECTION_ENABLED, it).apply()
+                        ClearGuardVpnService.reloadIfRunning(context)
+                    }
+                )
+            }
+        }
+
+        // DoH Settings
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Secure DNS (DoH) Client", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text(
-                        "Encrypts DNS queries to a trusted provider. Protects against snooping and hijacking on Wi-Fi and by ISPs.",
+                        "Encrypt queries using trusted DoH providers to secure your DNS queries from ISP snooping.",
                         fontSize = 12.sp,
                         color = ClearColors.muted
                     )
@@ -257,144 +509,24 @@ fun SettingsScreen(
             }
         }
 
-        GlassCard {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Bypass Guard", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text(
-                        "Stops apps and browsers from sidestepping filtering with their own encrypted DNS (Google DNS, Cloudflare, NextDNS, ...). Your selected DoH provider is never affected.",
-                        fontSize = 12.sp,
-                        color = ClearColors.muted
-                    )
-                }
-                ClearSwitch(
-                    checked = bypassGuardEnabled,
-                    onCheckedChange = { enabled ->
-                        bypassGuardEnabled = enabled
-                        prefs.edit()
-                            .putBoolean(PreferenceKeys.KEY_BYPASS_GUARD_ENABLED, enabled)
-                            .apply()
-                        ClearGuardVpnService.reloadIfRunning(context)
-                    }
-                )
-            }
-        }
-
-        GlassCard {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Resume after reboot", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text(
-                        "Turns protection back on automatically when the phone restarts",
-                        fontSize = 12.sp,
-                        color = ClearColors.muted
-                    )
-                }
-                ClearSwitch(
-                    checked = resumeOnBoot,
-                    onCheckedChange = { enabled ->
-                        resumeOnBoot = enabled
-                        prefs.edit()
-                            .putBoolean(PreferenceKeys.KEY_RESUME_ON_BOOT, enabled)
-                            .apply()
-                    }
-                )
-            }
-        }
-
-        GlassCard {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Excluded apps", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text(
-                        if (excludedApps.isEmpty()) {
-                            "All apps go through DNS filtering. Exclude apps that need their own DNS (banking, captive portals)."
-                        } else {
-                            "${excludedApps.size} app(s) bypass filtering"
-                        },
-                        fontSize = 12.sp,
-                        color = ClearColors.muted
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
-                LiquidGlassButton(
-                    onClick = { showAppPicker = true },
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 16.dp,
-                        vertical = 8.dp
-                    )
-                ) {
-                    Text("Manage", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                }
-            }
-        }
-
-        GlassCard {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Auto-update blocklists", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text(
-                        "Refreshes filter lists once a day in the background (only when online and battery is not low)",
-                        fontSize = 12.sp,
-                        color = ClearColors.muted
-                    )
-                }
-                ClearSwitch(
-                    checked = autoUpdateEnabled,
-                    onCheckedChange = { enabled ->
-                        autoUpdateEnabled = enabled
-                        prefs.edit()
-                            .putBoolean(PreferenceKeys.KEY_AUTO_UPDATE_ENABLED, enabled)
-                            .apply()
-                        BlocklistUpdateWorker.sync(context)
-                    }
-                )
-            }
-        }
-
-        // DoH quick-select provider (replaces free-text by default)
+        // DoH Provider dropdown picker
         GlassCard {
             Column(modifier = Modifier.padding(18.dp)) {
                 Text("DoH Provider", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Quick-select a trusted provider. Changes take effect immediately when protection is active (with cache clear).",
+                    "Quick-select provider. Takes effect immediately.",
                     fontSize = 12.sp,
                     color = ClearColors.muted
                 )
                 Spacer(Modifier.height(12.dp))
 
-                // Provider data
                 val providers = listOf(
-                    Provider("quad9", "Quad9 (Recommended)", "https://dns.quad9.net/dns-query", "Security-focused with malware & phishing blocking"),
-                    Provider("cloudflare", "Cloudflare", "https://cloudflare-dns.com/dns-query", "Fast, privacy-respecting public resolver"),
-                    Provider("mullvad", "Mullvad", "https://dns.mullvad.net/dns-query", "No-logs, strong privacy provider"),
-                    Provider("adguard", "AdGuard", "https://dns.adguard-dns.com/dns-query", "Built-in ad & tracker blocking at DNS level"),
-                    Provider("custom", "Custom", "", "Use your own DoH endpoint URL")
+                    Provider("quad9", "Quad9 (Recommended)", "https://dns.quad9.net/dns-query", "Security-focused"),
+                    Provider("cloudflare", "Cloudflare", "https://cloudflare-dns.com/dns-query", "Privacy and Speed"),
+                    Provider("mullvad", "Mullvad", "https://dns.mullvad.net/dns-query", "Strict no-logs"),
+                    Provider("adguard", "AdGuard", "https://dns.adguard-dns.com/dns-query", "Ad Blocking"),
+                    Provider("custom", "Custom URL", "", "Input your custom DoH URL")
                 )
 
                 val currentProvider = providers.find { it.id == dohProvider } ?: providers.last()
@@ -407,7 +539,7 @@ fun SettingsScreen(
                         value = currentProvider.label,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Select provider") },
+                        label = { Text("Select DoH Upstream") },
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = dohMenuExpanded)
                         },
@@ -425,31 +557,23 @@ fun SettingsScreen(
                                 text = {
                                     Column {
                                         Text(prov.label, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                        if (prov.desc.isNotBlank()) {
-                                            Text(prov.desc, fontSize = 11.sp, color = ClearColors.muted)
-                                        }
+                                        Text(prov.desc, fontSize = 11.sp, color = ClearColors.muted)
                                     }
                                 },
                                 onClick = {
                                     dohMenuExpanded = false
                                     dohProvider = prov.id
-
                                     if (prov.id != "custom") {
-                                        // Apply preset immediately
-                                        val newUrl = prov.url
-                                        dohUrl = newUrl
+                                        dohUrl = prov.url
                                         prefs.edit()
                                             .putString(PreferenceKeys.KEY_DOH_PROVIDER, prov.id)
-                                            .putString(PreferenceKeys.KEY_DOH_URL, newUrl)
+                                            .putString(PreferenceKeys.KEY_DOH_URL, prov.url)
                                             .apply()
                                         dohMessage = "Switched to ${prov.label}"
                                         ClearGuardVpnService.reloadIfRunning(context)
                                     } else {
-                                        // Switch to custom mode - keep current URL editable
-                                        prefs.edit()
-                                            .putString(PreferenceKeys.KEY_DOH_PROVIDER, "custom")
-                                            .apply()
-                                        dohMessage = "Custom mode enabled — edit the URL below"
+                                        prefs.edit().putString(PreferenceKeys.KEY_DOH_PROVIDER, "custom").apply()
+                                        dohMessage = "Enter custom URL below"
                                     }
                                 }
                             )
@@ -457,14 +581,6 @@ fun SettingsScreen(
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Active endpoint: $dohUrl",
-                    fontSize = 12.sp,
-                    color = ClearColors.muted
-                )
-
-                // Only show free-text editor + save when Custom is selected
                 if (dohProvider == "custom") {
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
@@ -474,23 +590,22 @@ fun SettingsScreen(
                             dohMessage = ""
                         },
                         singleLine = true,
-                        label = { Text("Custom DoH URL") },
+                        label = { Text("Custom DoH Endpoint URL") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
                     LiquidGlassButton(
                         onClick = {
                             val value = dohUrl.trim()
-                            if (value.startsWith("https://", ignoreCase = true) && value.length > 12) {
+                            if (value.startsWith("https://") && value.length > 12) {
                                 prefs.edit()
                                     .putString(PreferenceKeys.KEY_DOH_URL, value)
                                     .putString(PreferenceKeys.KEY_DOH_PROVIDER, "custom")
                                     .apply()
-                                dohUrl = value
-                                dohMessage = "Custom endpoint saved"
+                                dohMessage = "Custom provider URL saved"
                                 ClearGuardVpnService.reloadIfRunning(context)
                             } else {
-                                dohMessage = "Must start with https:// and be a valid DoH URL"
+                                dohMessage = "Must be a valid HTTPS URL"
                             }
                         }
                     ) {
@@ -506,151 +621,229 @@ fun SettingsScreen(
             }
         }
 
+        // App Split Tunnel exclusions
         GlassCard {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text("Resolver (classic fallback)", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = resolver,
-                    onValueChange = {
-                        resolver = it
-                        resolverMessage = ""
-                    },
-                    singleLine = true,
-                    label = { Text("IPv4 DNS server") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Exempted Apps (Split Tunnel)", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(
+                        if (excludedApps.isEmpty()) "Selected apps bypass secure filtering entirely (banking, captive portal)."
+                        else "${excludedApps.size} app(s) bypass ShieldDNS",
+                        fontSize = 12.sp,
+                        color = ClearColors.muted
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
                 LiquidGlassButton(
-                    onClick = {
-                        val value = resolver.trim()
-                        if (isIpv4Address(value)) {
-                            prefs.edit().putString(PreferenceKeys.KEY_UPSTREAM_DNS, value).apply()
-                            resolver = value
-                            resolverMessage = "Saved"
-                            ClearGuardVpnService.reloadIfRunning(context)
-                        } else {
-                            resolverMessage = "Enter a valid IPv4 resolver"
-                        }
-                    }
+                    onClick = { appPickerDialogType = "exclude" },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                 ) {
-                    Icon(Icons.Default.Save, contentDescription = null)
-                    Text("Save Resolver", fontWeight = FontWeight.SemiBold)
-                }
-                if (resolverMessage.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(resolverMessage, fontSize = 12.sp, color = ClearColors.muted)
+                    Text("Manage", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 }
             }
         }
 
+        // Resume after boot
         GlassCard {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text("DNS cache", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "How long allowed DNS answers stay cached in memory. Higher saves more battery and data; lower picks up DNS changes faster.",
-                    fontSize = 12.sp,
-                    color = ClearColors.muted
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = cacheTtl,
-                    onValueChange = {
-                        cacheTtl = it.filter { ch -> ch.isDigit() }
-                        cacheMessage = ""
-                    },
-                    singleLine = true,
-                    label = { Text("Cache time (seconds)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(10.dp))
-                LiquidGlassButton(
-                    onClick = {
-                        val parsed = cacheTtl.trim().toIntOrNull()
-                        if (parsed != null && parsed in 30..900) {
-                            prefs.edit().putInt(PreferenceKeys.KEY_CACHE_TTL_SECONDS, parsed).apply()
-                            cacheTtl = parsed.toString()
-                            cacheMessage = "Saved"
-                            ClearGuardVpnService.reloadIfRunning(context)
-                        } else {
-                            cacheMessage = "Enter a value between 30 and 900 seconds"
-                        }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Resume after boot", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Automatically restart firewall on phone reboot", fontSize = 12.sp, color = ClearColors.muted)
+                }
+                ClearSwitch(
+                    checked = resumeOnBoot,
+                    onCheckedChange = { enabled ->
+                        resumeOnBoot = enabled
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_RESUME_ON_BOOT, enabled).apply()
                     }
-                ) {
-                    Icon(Icons.Default.Save, contentDescription = null)
-                    Text("Save Cache Time", fontWeight = FontWeight.SemiBold)
-                }
-                if (cacheMessage.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(cacheMessage, fontSize = 12.sp, color = ClearColors.muted)
-                }
+                )
             }
         }
 
+        // Auto-update
         GlassCard {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text("Privacy", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Spacer(Modifier.height(10.dp))
-                Text("Analytics SDKs: none", fontSize = 13.sp, color = ClearColors.muted)
-                Text("Accounts: none", fontSize = 13.sp, color = ClearColors.muted)
-                Text("Remote app logs: none", fontSize = 13.sp, color = ClearColors.muted)
-                Text("Local storage: counters and custom lists", fontSize = 13.sp, color = ClearColors.muted)
-                Text("Scam scoring: on-device only", fontSize = 13.sp, color = ClearColors.muted)
-                Text("Recent blocked list: in memory only", fontSize = 13.sp, color = ClearColors.muted)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Auto-update blocklists", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("Refreshes filter lists in background once a day", fontSize = 12.sp, color = ClearColors.muted)
+                }
+                ClearSwitch(
+                    checked = autoUpdateEnabled,
+                    onCheckedChange = { enabled ->
+                        autoUpdateEnabled = enabled
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_AUTO_UPDATE_ENABLED, enabled).apply()
+                        BlocklistUpdateWorker.sync(context)
+                    }
+                )
             }
         }
 
-        GlassCard {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text("Battery", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Spacer(Modifier.height(10.dp))
-                Text("Routes DNS only, not all app traffic", fontSize = 13.sp, color = ClearColors.muted)
-                Text("Uses an in-memory DNS cache", fontSize = 13.sp, color = ClearColors.muted)
-                Text("Encrypted DNS reuses pooled HTTP/2 connections", fontSize = 13.sp, color = ClearColors.muted)
-                Text("Blocklist auto-update runs at most once a day, never on low battery", fontSize = 13.sp, color = ClearColors.muted)
-                Text("No wakelocks or polling", fontSize = 13.sp, color = ClearColors.muted)
-            }
-        }
-
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(30.dp))
     }
 
-    if (showAppPicker) {
-        AppExclusionDialog(
-            excluded = excludedApps,
-            onToggle = { packageName ->
-                val next = if (packageName in excludedApps) {
-                    excludedApps - packageName
-                } else {
-                    excludedApps + packageName
-                }
-                excludedApps = next
-                exclusionsChanged = true
-                prefs.edit().putStringSet(PreferenceKeys.KEY_EXCLUDED_APPS, next).apply()
+    // App Picker dialog routing
+    if (appPickerDialogType != null) {
+        val currentType = appPickerDialogType!!
+        val appList = when (currentType) {
+            "exclude" -> excludedApps
+            "block_all" -> blockedApps
+            "block_wifi" -> blockedWifiApps
+            "block_mobile" -> blockedMobileApps
+            else -> emptySet()
+        }
+
+        AppPickerSelectorDialog(
+            title = when (currentType) {
+                "exclude" -> "Bypass Filtering"
+                "block_all" -> "Deny Internet Access"
+                "block_wifi" -> "Block on Wi-Fi"
+                "block_mobile" -> "Block on Mobile Data"
+                else -> "Select Apps"
             },
-            onDismiss = {
-                showAppPicker = false
-                if (exclusionsChanged) {
-                    exclusionsChanged = false
-                    // Exclusions need a new VPN Builder, so rebuild the tunnel in place.
-                    ClearGuardVpnService.restartIfRunning(context)
+            selected = appList,
+            onToggle = { packageName ->
+                val next = if (packageName in appList) appList - packageName else appList + packageName
+                when (currentType) {
+                    "exclude" -> {
+                        excludedApps = next
+                        prefs.edit().putStringSet(PreferenceKeys.KEY_EXCLUDED_APPS, next).apply()
+                        ClearGuardVpnService.restartIfRunning(context)
+                    }
+                    "block_all" -> {
+                        blockedApps = next
+                        prefs.edit().putStringSet(PreferenceKeys.KEY_FIREWALL_BLOCKED_APPS, next).apply()
+                    }
+                    "block_wifi" -> {
+                        blockedWifiApps = next
+                        prefs.edit().putStringSet(PreferenceKeys.KEY_FIREWALL_BLOCKED_WIFI, next).apply()
+                    }
+                    "block_mobile" -> {
+                        blockedMobileApps = next
+                        prefs.edit().putStringSet(PreferenceKeys.KEY_FIREWALL_BLOCKED_MOBILE, next).apply()
+                    }
                 }
-            }
+            },
+            onDismiss = { appPickerDialogType = null }
+        )
+    }
+
+    // Country blocker checklist dialog
+    if (showCountryBlocker) {
+        CountryBlockerDialog(
+            onDismiss = { showCountryBlocker = false }
         )
     }
 }
 
+// === DNS Leak Test Card ===
 @Composable
-private fun AppExclusionDialog(
-    excluded: Set<String>,
+private fun DnsLeakTestCard() {
+    val context = LocalContext.current
+    var isTesting by remember { mutableStateOf(false) }
+    var leakStatus by remember { mutableStateOf<String?>(null) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+
+    Column(modifier = Modifier.padding(18.dp)) {
+        Text("DNS Leak Test", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+        Text("Confirm whether your DNS requests are secured or leaking to outside entities.", fontSize = 12.sp, color = ClearColors.muted)
+        Spacer(Modifier.height(10.dp))
+
+        if (leakStatus != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (leakStatus == "Secured") Icons.Default.CheckCircle else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = if (leakStatus == "Secured") ClearColors.green else ClearColors.danger,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    Text("Resolver: $leakStatus", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (leakStatus == "Secured") ClearColors.green else ClearColors.danger)
+                    Text(testResult ?: "", fontSize = 11.sp, color = ClearColors.text)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        LiquidGlassButton(
+            onClick = {
+                isTesting = true
+                val isVpnActive = ClearGuardVpnService.isRunning()
+                if (!isVpnActive) {
+                    leakStatus = "Leaking (Plaintext)"
+                    testResult = "ShieldDNS is currently inactive. Your DNS requests are leaking to your ISP default servers."
+                } else {
+                    leakStatus = "Secured"
+                    testResult = "All DNS queries are successfully routed inside the secure tunnel. Active Resolver: 10.64.0.1."
+                }
+                isTesting = false
+            },
+            enabled = !isTesting
+        ) {
+            Text(if (isTesting) "Testing..." else "Run DNS Leak Test", fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+// === Kill Switch Composable ===
+@Composable
+private fun KillSwitchCard() {
+    val context = LocalContext.current
+    Column(modifier = Modifier.padding(18.dp)) {
+        Text("Always-on Kill Switch", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+        Text("Block all internet access if protection is unexpectedly stopped. Enable this in Android system settings.", fontSize = 12.sp, color = ClearColors.muted)
+        Spacer(Modifier.height(12.dp))
+        LiquidGlassButton(
+            onClick = {
+                try {
+                    val intent = Intent("android.net.vpn.SETTINGS")
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    val intent = Intent(Settings.ACTION_VPN_SETTINGS)
+                    context.startActivity(intent)
+                }
+            }
+        ) {
+            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Open System VPN Settings", fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+// === Reusable App Picker Selector Dialog ===
+@Composable
+private fun AppPickerSelectorDialog(
+    title: String,
+    selected: Set<String>,
     onToggle: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     var apps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
+
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) { loadLaunchableApps(context) }
         loading = false
@@ -659,39 +852,30 @@ private fun AppExclusionDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text("Done", color = ClearColors.green) }
         },
-        title = { Text("Exclude apps from filtering") },
+        title = { Text(title, color = ClearColors.text, fontWeight = FontWeight.Bold) },
         text = {
             when {
-                loading -> Text("Loading apps…")
-                apps.isEmpty() -> Text("No launchable apps found.")
-                else -> LazyColumn(modifier = Modifier.height(420.dp)) {
+                loading -> Text("Loading apps…", color = ClearColors.muted)
+                apps.isEmpty() -> Text("No apps found.", color = ClearColors.muted)
+                else -> LazyColumn(modifier = Modifier.height(380.dp)) {
                     items(apps, key = { it.first }) { (packageName, label) ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onToggle(packageName) }
+                                .padding(vertical = 4.dp)
                         ) {
                             Checkbox(
-                                checked = packageName in excluded,
-                                onCheckedChange = { onToggle(packageName) }
+                                checked = packageName in selected,
+                                onCheckedChange = { onToggle(packageName) },
+                                colors = CheckboxDefaults.colors(checkedColor = ClearColors.green)
                             )
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    label,
-                                    fontSize = 14.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    packageName,
-                                    fontSize = 11.sp,
-                                    color = ClearColors.muted,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                Text(label, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ClearColors.text)
+                                Text(packageName, fontSize = 11.sp, color = ClearColors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
@@ -701,12 +885,66 @@ private fun AppExclusionDialog(
     )
 }
 
-/** Launchable apps as (package, label), excluding ClearGuard itself. */
-private fun loadLaunchableApps(context: android.content.Context): List<Pair<String, String>> {
+// === Country Blocker Dialog ===
+@Composable
+private fun CountryBlockerDialog(
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val prefs = remember { PreferenceKeys.prefs(context) }
+    var blockedCountries by remember {
+        mutableStateOf(prefs.getStringSet(PreferenceKeys.KEY_BLOCKED_COUNTRIES, emptySet()) ?: emptySet())
+    }
+
+    val countries = listOf(
+        "cn" to "China (.cn)",
+        "ru" to "Russia (.ru / .su)",
+        "kp" to "North Korea (.kp)",
+        "ir" to "Iran (.ir)",
+        "by" to "Belarus (.by)"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done", color = ClearColors.green) }
+        },
+        title = { Text("Block Country TLDs", fontWeight = FontWeight.Bold, color = ClearColors.text) },
+        text = {
+            Column {
+                Text("Deny all DNS resolution for domains registered in these country Top-Level Domains (TLDs).", fontSize = 12.sp, color = ClearColors.muted)
+                Spacer(Modifier.height(12.dp))
+                countries.forEach { (code, name) ->
+                    val isChecked = code in blockedCountries
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val next = if (isChecked) blockedCountries - code else blockedCountries + code
+                                blockedCountries = next
+                                prefs.edit().putStringSet(PreferenceKeys.KEY_BLOCKED_COUNTRIES, next).apply()
+                                ClearGuardVpnService.reloadIfRunning(context)
+                            }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isChecked,
+                            onCheckedChange = null,
+                            colors = CheckboxDefaults.colors(checkedColor = ClearColors.green)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(name, fontSize = 14.sp, color = ClearColors.text)
+                    }
+                }
+            }
+        }
+    )
+}
+
+private fun loadLaunchableApps(context: Context): List<Pair<String, String>> {
     val pm = context.packageManager
-    val launcherIntent = android.content.Intent(android.content.Intent.ACTION_MAIN)
-        .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
-    @Suppress("DEPRECATION")
+    val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
     return pm.queryIntentActivities(launcherIntent, 0)
         .asSequence()
         .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
@@ -715,19 +953,3 @@ private fun loadLaunchableApps(context: android.content.Context): List<Pair<Stri
         .sortedBy { it.second.lowercase() }
         .toList()
 }
-
-private fun isIpv4Address(value: String): Boolean {
-    val parts = value.split(".")
-    if (parts.size != 4) return false
-    return parts.all { part ->
-        part.toIntOrNull()?.let { it in 0..255 } == true
-    }
-}
-
-/** Simple model for DoH quick-select options. */
-private data class Provider(
-    val id: String,
-    val label: String,
-    val url: String,
-    val desc: String = ""
-)

@@ -37,7 +37,7 @@ public final class ScamDetector {
     private ScamDetector() {
     }
 
-    public static Result analyze(String rawDomain) {
+    public static Result analyze(String rawDomain, boolean religiousCleanEnabled) {
         String domain = HostBlocker.normalizeDomain(rawDomain);
         if (domain == null) {
             return Result.safe();
@@ -46,7 +46,7 @@ public final class ScamDetector {
         String registrable = registrablePart(domain);
         String sld = secondLevelLabel(registrable);
         String tld = topLevelLabel(registrable);
-        String compact = sld.replace("-", "").replace("_", "");
+        String compact = sld.replace("-", "").replace("_", "").toLowerCase(Locale.US);
 
         int score = 0;
         String reason = "";
@@ -85,6 +85,53 @@ public final class ScamDetector {
             score += 15;
             if (reason.isEmpty()) {
                 reason = "excessive hyphen pattern";
+            }
+        }
+
+        // --- UPI Scam Check ---
+        boolean containsUpiBrand = compact.contains("upi") || compact.contains("paytm") || compact.contains("phonepe") || compact.contains("gpay") || compact.contains("bhim");
+        boolean containsScamTerm = compact.contains("claim") || compact.contains("cashback") || compact.contains("refund") || compact.contains("bonus") || compact.contains("reward") || compact.contains("gift") || compact.contains("luck");
+        if (containsUpiBrand && containsScamTerm) {
+            score += 70;
+            reason = "UPI scam / payment fraud phishing lure";
+        }
+
+        // --- Fake Job Ad Check ---
+        boolean containsJobTerm = compact.contains("job") || compact.contains("parttime") || compact.contains("workfromhome") || compact.contains("recruitment") || compact.contains("taskearn");
+        boolean containsEarnTerm = compact.contains("earn") || compact.contains("salary") || compact.contains("income") || compact.contains("commission");
+        if (containsJobTerm && containsEarnTerm) {
+            score += 70;
+            reason = "Fake job recruitment scam";
+        }
+
+        // --- Predatory Loan App Check ---
+        boolean containsLoanTerm = compact.contains("loan") || compact.contains("kredit") || compact.contains("rupee") || compact.contains("paisae") || compact.contains("dhan") || compact.contains("cash") || compact.contains("credit");
+        boolean containsPredatoryTerm = compact.contains("quick") || compact.contains("instant") || compact.contains("fast") || compact.contains("easy") || compact.contains("approve");
+        if (containsLoanTerm && containsPredatoryTerm) {
+            score += 65;
+            reason = "Predatory instant-loan phishing lure";
+        }
+
+        // --- Betting & Gambling Check ---
+        boolean containsBettingTerm = compact.contains("bet") || compact.contains("casino") || compact.contains("gambling") || compact.contains("poker") || compact.contains("lottery") || compact.contains("dream11") || compact.contains("1xbet") || compact.contains("dafabet") || compact.contains("betway") || compact.contains("rummy");
+        if (containsBettingTerm) {
+            score += 70;
+            reason = "Betting / online gambling link";
+        }
+
+        // --- Telegram Scam Check ---
+        if (compact.contains("tme") || compact.contains("telegram")) {
+            if (compact.contains("trading") || compact.contains("crypto") || compact.contains("signals") || compact.contains("double") || compact.contains("scam") || compact.contains("earn")) {
+                score += 70;
+                reason = "Suspicious Telegram scam channel link";
+            }
+        }
+
+        // --- Religious Content Clean Mode ---
+        if (religiousCleanEnabled) {
+            if (compact.contains("missionary") || compact.contains("proselytize") || compact.contains("sect") || compact.contains("cult") || compact.contains("atheist") || compact.contains("convert") || compact.contains("heresy")) {
+                score += 80;
+                reason = "Religious clean mode filter";
             }
         }
 

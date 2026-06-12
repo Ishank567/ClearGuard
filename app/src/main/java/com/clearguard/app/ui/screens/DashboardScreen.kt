@@ -211,6 +211,72 @@ fun DashboardScreen(
             )
         }
 
+        // One-tap security modes selector
+        Text("Security Profiles", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
+        
+        val context = LocalContext.current
+        val prefs = remember { PreferenceKeys.prefs(context) }
+        var currentMode by remember {
+            mutableStateOf(prefs.getString(PreferenceKeys.KEY_SECURITY_MODE, PreferenceKeys.DEFAULT_SECURITY_MODE) ?: "strict")
+        }
+        
+        val modes = listOf(
+            Triple("basic", "Basic", Icons.Default.Verified),
+            Triple("strict", "Strict", Icons.Default.Security),
+            Triple("family", "Family", Icons.Default.ChildCare),
+            Triple("gaming", "Gaming", Icons.Default.Gamepad),
+            Triple("battery", "Saver", Icons.Default.BatteryChargingFull)
+        )
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            modes.forEach { (modeId, label, icon) ->
+                val selected = currentMode == modeId
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(60.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (selected) ClearColors.green.copy(alpha = 0.18f) else ClearColors.bg.copy(alpha = 0.25f))
+                        .border(
+                            width = 1.dp,
+                            color = if (selected) ClearColors.green.copy(alpha = 0.35f) else ClearColors.border.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .clickable {
+                            currentMode = modeId
+                            prefs.edit().putString(PreferenceKeys.KEY_SECURITY_MODE, modeId).apply()
+                            com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(context)
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(icon, contentDescription = null, tint = if (selected) ClearColors.green else ClearColors.muted, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.height(2.dp))
+                        Text(label, fontSize = 10.sp, color = if (selected) ClearColors.green else ClearColors.text, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+        }
+        
+        // Mode description card
+        val modeDesc = when (currentMode) {
+            "basic" -> "Blocks standard advertisements and telemetry trackers."
+            "strict" -> "Strict protection. Blocks social widgets, fingerprinters and scam domains."
+            "family" -> "Safe for kids. Blocks adult sites, gambling, and short-video apps (TikTok)."
+            "gaming" -> "Optimized for latency. Uses Cloudflare DoH and caches DNS for 30 minutes."
+            "battery" -> "Optimized for battery. Disables DoH encryption, caches DNS queries for 1 hour."
+            else -> ""
+        }
+        Text(
+            text = modeDesc,
+            fontSize = 11.sp,
+            color = ClearColors.muted,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+        )
+
         GlassCard(
             modifier = Modifier.fillMaxWidth()
         ) {

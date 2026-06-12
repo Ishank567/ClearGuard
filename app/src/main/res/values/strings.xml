@@ -1,7 +1,9 @@
 <resources>
-    <string name="app_name">ClearGuard</string>
-    <string name="protection_active">Protection Active</string>
-    <string name="protection_paused">Protection Paused</string>
+    <string name="app_name">ShieldDNS</string>
+    <string name="protection_active">Firewall Active</string>
+    <string name="protection_paused">Firewall Paused</string>
     <string name="blocked_today">Blocked Today</string>
     <string name="total_blocked">Total Blocked</string>
+    <string name="unsafe_wifi_title">Unsafe Wi-Fi Detected</string>
+    <string name="unsafe_wifi_text">Joined unsafe public Wi-Fi. ShieldDNS is active to secure your traffic.</string>
 </resources>

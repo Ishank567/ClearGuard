@@ -52,11 +52,11 @@ import com.clearguard.app.blocking.BlocklistUpdateWorker
 import com.clearguard.app.blocking.HostBlocker
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardHero
-import com.clearguard.app.ui.screens.ActivityScreen
 import com.clearguard.app.ui.screens.BlocklistsScreen
+import com.clearguard.app.ui.screens.BrowserScreen
 import com.clearguard.app.ui.screens.DashboardScreen
+import com.clearguard.app.ui.screens.PrivacyScreen
 import com.clearguard.app.ui.screens.SettingsScreen
-import com.clearguard.app.ui.screens.StatisticsScreen
 import com.clearguard.app.ui.theme.ClearColors
 import com.clearguard.app.ui.theme.ClearDesign
 import com.clearguard.app.ui.theme.ClearGuardTheme
@@ -68,8 +68,8 @@ import kotlinx.coroutines.isActive
 
 enum class AppScreen(val title: String, val icon: ImageVector) {
     Dashboard("Home", Icons.Default.Shield),
-    Activity("Activity", Icons.Default.History),
-    Statistics("Stats", Icons.Default.BarChart),
+    Privacy("Privacy", Icons.Default.VerifiedUser),
+    Browser("Browser", Icons.Default.Language),
     Blocklists("Lists", Icons.AutoMirrored.Filled.List),
     Settings("Settings", Icons.Default.Settings)
 }
@@ -263,8 +263,7 @@ fun ClearGuardApp(
                         scamBlockedToday = scamBlockedTodayState.value,
                         dohEnabled = dohEnabledState.value
                     )
-                    AppScreen.Activity -> ActivityScreen(isProtected = isProtected)
-                    AppScreen.Statistics -> StatisticsScreen(
+                    AppScreen.Privacy -> PrivacyScreen(
                         blockedTotal = blockedTotalState.value,
                         allowedTotal = allowedTotalState.value,
                         blockedToday = blockedTodayState.value,
@@ -276,6 +275,7 @@ fun ClearGuardApp(
                         dohEnabled = dohEnabledState.value,
                         dohQueries = dohQueryState.value
                     )
+                    AppScreen.Browser -> BrowserScreen()
                     AppScreen.Blocklists -> BlocklistsScreen()
                     AppScreen.Settings -> SettingsScreen(
                         isProtected = isProtected,
@@ -386,7 +386,7 @@ fun GlassHeader(title: String, isProtected: Boolean) {
     ) {
         Column {
             Text(
-                text = "ClearGuard",
+                text = "ShieldDNS",
                 fontSize = 13.sp,
                 color = ClearColors.muted,
                 fontWeight = FontWeight.Medium

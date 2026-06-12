@@ -54,6 +54,20 @@ public final class PreferenceKeys {
      */
     private static final String KEY_DEFAULT_SOURCES_VERSION = "default_sources_version";
 
+    // ShieldDNS Custom Firewall and Privacy Keys
+    public static final String KEY_FIREWALL_BLOCKED_APPS = "firewall_blocked_apps";
+    public static final String KEY_FIREWALL_BLOCKED_WIFI = "firewall_blocked_wifi";
+    public static final String KEY_FIREWALL_BLOCKED_MOBILE = "firewall_blocked_mobile";
+    public static final String KEY_BLOCKED_COUNTRIES = "blocked_countries";
+    public static final String KEY_TIME_RULES_ENABLED = "time_rules_enabled";
+    public static final String KEY_BACKGROUND_BLOCK_ENABLED = "background_block_enabled";
+    public static final String KEY_SECURITY_MODE = "security_mode";
+    public static final String KEY_WIFI_PROTECTION_ENABLED = "wifi_protection_enabled";
+    public static final String KEY_REGIONAL_PACK_INDIA = "regional_pack_india";
+    public static final String KEY_BROWSER_COOKIE_REMOVER = "browser_cookie_remover";
+    public static final String KEY_BROWSER_ANTI_FINGERPRINT = "browser_anti_fingerprint";
+    public static final String KEY_BROWSER_CLEANER_RULES = "browser_cleaner_rules";
+
     public static final int DEFAULT_CACHE_TTL_SECONDS = 300;
     public static final boolean DEFAULT_SCAM_SHIELD_ENABLED = true;
     public static final String DEFAULT_UPSTREAM_DNS = "9.9.9.9";
@@ -65,6 +79,15 @@ public final class PreferenceKeys {
     public static final boolean DEFAULT_RESUME_ON_BOOT = true;
     public static final String DEFAULT_THEME_MODE = "system";
     private static final int DEFAULT_SOURCES_VERSION = 3;
+
+    // ShieldDNS Defaults
+    public static final String DEFAULT_SECURITY_MODE = "strict";
+    public static final boolean DEFAULT_TIME_RULES_ENABLED = false;
+    public static final boolean DEFAULT_BACKGROUND_BLOCK_ENABLED = false;
+    public static final boolean DEFAULT_WIFI_PROTECTION_ENABLED = true;
+    public static final boolean DEFAULT_REGIONAL_PACK_INDIA = false;
+    public static final boolean DEFAULT_BROWSER_COOKIE_REMOVER = true;
+    public static final boolean DEFAULT_BROWSER_ANTI_FINGERPRINT = true;
 
     private PreferenceKeys() {
     }
@@ -131,6 +154,34 @@ public final class PreferenceKeys {
         }
         if (!prefs.contains(KEY_RESUME_ON_BOOT)) {
             editor.putBoolean(KEY_RESUME_ON_BOOT, DEFAULT_RESUME_ON_BOOT);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_SECURITY_MODE)) {
+            editor.putString(KEY_SECURITY_MODE, DEFAULT_SECURITY_MODE);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_TIME_RULES_ENABLED)) {
+            editor.putBoolean(KEY_TIME_RULES_ENABLED, DEFAULT_TIME_RULES_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BACKGROUND_BLOCK_ENABLED)) {
+            editor.putBoolean(KEY_BACKGROUND_BLOCK_ENABLED, DEFAULT_BACKGROUND_BLOCK_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_WIFI_PROTECTION_ENABLED)) {
+            editor.putBoolean(KEY_WIFI_PROTECTION_ENABLED, DEFAULT_WIFI_PROTECTION_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_REGIONAL_PACK_INDIA)) {
+            editor.putBoolean(KEY_REGIONAL_PACK_INDIA, DEFAULT_REGIONAL_PACK_INDIA);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_COOKIE_REMOVER)) {
+            editor.putBoolean(KEY_BROWSER_COOKIE_REMOVER, DEFAULT_BROWSER_COOKIE_REMOVER);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_ANTI_FINGERPRINT)) {
+            editor.putBoolean(KEY_BROWSER_ANTI_FINGERPRINT, DEFAULT_BROWSER_ANTI_FINGERPRINT);
             changed = true;
         }
 

@@ -7,9 +7,17 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.VpnService;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
+import android.os.PowerManager;
 import android.os.SystemClock;
 
 import com.clearguard.app.MainActivity;
@@ -24,6 +32,7 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.SynchronousQueue;
@@ -38,7 +47,7 @@ public final class ClearGuardVpnService extends VpnService {
     public static final String ACTION_RESTART = "com.clearguard.app.RESTART";
     public static final String ACTION_STATS_CHANGED = "com.clearguard.app.STATS_CHANGED";
 
-    private static final String CHANNEL_ID = "clear_guard_vpn";
+    private static final String CHANNEL_ID = "shield_dns_vpn";
     private static final int NOTIFICATION_ID = 31;
     private static final String VPN_ADDRESS = "10.64.0.2";
     private static final String VIRTUAL_DNS = "10.64.0.1";
@@ -46,14 +55,13 @@ public final class ClearGuardVpnService extends VpnService {
     private static final int RECENT_QUERIES_MAX = 100;
     private static final java.util.ArrayDeque<BlockedQuery> RECENT_QUERIES = new java.util.ArrayDeque<>();
 
+    // Map of packageName -> AppStats for privacy analysis
+    private static final java.util.concurrent.ConcurrentHashMap<String, AppStats> APP_PRIVACY_STATS = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static volatile boolean runningVisibleToUi;
     public static volatile boolean isRunning;
 
-    // Each DNS query is handled on this pool so one slow upstream lookup never blocks
-    // the rest of the device's DNS traffic. CallerRunsPolicy gives natural backpressure.
     private static final int MAX_QUERY_THREADS = 8;
-
-    /** How many per-domain block counters are persisted for the statistics screen. */
     private static final int TOP_DOMAINS_LIMIT = 50;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -62,18 +70,14 @@ public final class ClearGuardVpnService extends VpnService {
     private final java.util.concurrent.ConcurrentHashMap<String, Long> blockedDomainCounts =
             new java.util.concurrent.ConcurrentHashMap<>();
 
-    /**
-     * Bumped on every successful start so a packet loop from a previous VPN session
-     * (e.g. before an in-place restart) cannot tear down the current one.
-     */
     private volatile int vpnGeneration;
-
     private ParcelFileDescriptor vpnInterface;
     private HostBlocker blocker;
     private SharedPreferences prefs;
     private Thread workerThread;
     private ExecutorService queryExecutor;
     private DohResolver dohResolver;
+    private ConnectivityManager.NetworkCallback wifiProtectionCallback;
 
     private long allowedTotal;
     private long blockedTotal;
@@ -118,10 +122,6 @@ public final class ClearGuardVpnService extends VpnService {
         context.startService(intent);
     }
 
-    /**
-     * Asks a running service to rebuild its host lists and drop its DNS cache so list edits
-     * take effect immediately. No-op when protection is off.
-     */
     public static void reloadIfRunning(Context context) {
         if (!runningVisibleToUi) {
             return;
@@ -130,10 +130,6 @@ public final class ClearGuardVpnService extends VpnService {
         context.startService(intent);
     }
 
-    /**
-     * Rebuilds the VPN interface in place so changes that require a new Builder
-     * (such as per-app exclusions) take effect. No-op when protection is off.
-     */
     public static void restartIfRunning(Context context) {
         if (!runningVisibleToUi) {
             return;
@@ -142,7 +138,6 @@ public final class ClearGuardVpnService extends VpnService {
         context.startService(intent);
     }
 
-    /** A point-in-time snapshot of recent queries (most recent first). */
     public static java.util.List<BlockedQuery> recentBlocked() {
         synchronized (RECENT_QUERIES) {
             return new java.util.ArrayList<>(RECENT_QUERIES);
@@ -155,7 +150,15 @@ public final class ClearGuardVpnService extends VpnService {
         }
     }
 
-    private static void addRecentQuery(String domain, String reason, int threatScore, boolean blocked, String status, int latencyMs) {
+    public static java.util.List<AppStats> getAppPrivacyStats() {
+        return new java.util.ArrayList<>(APP_PRIVACY_STATS.values());
+    }
+
+    public static void clearAppPrivacyStats() {
+        APP_PRIVACY_STATS.clear();
+    }
+
+    private static void addRecentQuery(String domain, String reason, int threatScore, boolean blocked, String status, int latencyMs, String appName, String appPackage) {
         synchronized (RECENT_QUERIES) {
             RECENT_QUERIES.addFirst(new BlockedQuery(
                     domain,
@@ -164,7 +167,9 @@ public final class ClearGuardVpnService extends VpnService {
                     threatScore,
                     blocked,
                     status,
-                    latencyMs));
+                    latencyMs,
+                    appName,
+                    appPackage));
             while (RECENT_QUERIES.size() > RECENT_QUERIES_MAX) {
                 RECENT_QUERIES.removeLast();
             }
@@ -196,6 +201,7 @@ public final class ClearGuardVpnService extends VpnService {
         dohResolver = new DohResolver();
         loadDohConfig();
         createNotificationChannel();
+        registerWifiProtection();
     }
 
     @Override
@@ -211,6 +217,8 @@ public final class ClearGuardVpnService extends VpnService {
             blocker.reload();
             responseCache.clear();
             loadDohConfig();
+            unregisterWifiProtection();
+            registerWifiProtection();
             if (!running.get()) {
                 stopSelf(startId);
                 return START_NOT_STICKY;
@@ -237,12 +245,12 @@ public final class ClearGuardVpnService extends VpnService {
         if (dohResolver != null) {
             dohResolver.shutdown();
         }
+        unregisterWifiProtection();
         super.onDestroy();
     }
 
     @Override
     public void onRevoke() {
-        // The user (or another VPN) revoked consent; do not auto-resume on the next boot.
         prefs.edit().putBoolean(PreferenceKeys.KEY_PROTECTION_DESIRED, false).apply();
         stopVpn();
         super.onRevoke();
@@ -253,10 +261,10 @@ public final class ClearGuardVpnService extends VpnService {
             return;
         }
 
-        startForeground(NOTIFICATION_ID, buildNotification("Starting DNS shield"));
+        startForeground(NOTIFICATION_ID, buildNotification("Starting ShieldDNS firewall"));
         try {
             Builder builder = new Builder()
-                    .setSession("ClearGuard")
+                    .setSession("ShieldDNS")
                     .setMtu(1500)
                     .addAddress(VPN_ADDRESS, 32)
                     .addDnsServer(VIRTUAL_DNS)
@@ -268,7 +276,6 @@ public final class ClearGuardVpnService extends VpnService {
                 builder.setMetered(false);
             }
 
-            // Per-app exclusions: traffic from these apps never enters the tunnel.
             java.util.Set<String> excludedApps = prefs.getStringSet(
                     PreferenceKeys.KEY_EXCLUDED_APPS, java.util.Collections.emptySet());
             if (excludedApps != null) {
@@ -276,7 +283,6 @@ public final class ClearGuardVpnService extends VpnService {
                     try {
                         builder.addDisallowedApplication(packageName);
                     } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {
-                        // The app was uninstalled; skip it.
                     }
                 }
             }
@@ -299,10 +305,10 @@ public final class ClearGuardVpnService extends VpnService {
             vpnGeneration++;
             final int generation = vpnGeneration;
             final ParcelFileDescriptor iface = vpnInterface;
-            workerThread = new Thread(() -> runPacketLoop(iface, generation), "ClearGuardDnsVpn");
+            workerThread = new Thread(() -> runPacketLoop(iface, generation), "ShieldDNSVpnThread");
             workerThread.start();
             prefs.edit().putBoolean(PreferenceKeys.KEY_PROTECTION_DESIRED, true).apply();
-            updateNotification("DNS shield active");
+            updateNotification("ShieldDNS Active");
         } catch (IOException | RuntimeException error) {
             running.set(false);
             runningVisibleToUi = false;
@@ -345,18 +351,13 @@ public final class ClearGuardVpnService extends VpnService {
                         try {
                             handlePacket(copy, copy.length, output);
                         } catch (IOException | RuntimeException ignored) {
-                            // A failed query must not take down the other in-flight queries.
                         }
                     });
                 }
             }
         } catch (IOException ignored) {
-            // Closing the VPN descriptor during stop also lands here.
         } catch (java.util.concurrent.RejectedExecutionException ignored) {
-            // The executor shut down while we were dispatching; the loop is ending anyway.
         } finally {
-            // Only tear the service down if this loop still belongs to the live session;
-            // after an in-place restart the old loop must exit without side effects.
             if (generation == vpnGeneration) {
                 stopVpn();
             }
@@ -376,58 +377,179 @@ public final class ClearGuardVpnService extends VpnService {
             return;
         }
 
-        byte[] dnsResponse;
-        ScamDetector.Result scamThreat = scamThreat(question.name);
-        if (blocker.shouldBlock(question.name)) {
-            dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
-            if (blocker.isSecurityBlock(question.name)) {
-                recordSecurityBlocked(question.name);
-            } else {
-                recordBlocked(question.name);
-            }
-        } else if (bypassGuardEnabled
-                && !blocker.isAllowed(question.name)
-                && DnsBypassGuard.isBypassDomain(question.name, bypassExemptHost)) {
-            // SERVFAIL makes apps fall back to the (filtered) system resolver instead
-            // of tunneling their lookups through their own encrypted DNS.
+        final AppInfo appInfo = getAppInfoForRequest(request);
+        byte[] dnsResponse = null;
+
+        // 1. Firewall rules
+        // Block internet access for selected apps
+        java.util.Set<String> blockedApps = prefs.getStringSet(PreferenceKeys.KEY_FIREWALL_BLOCKED_APPS, java.util.Collections.emptySet());
+        if (blockedApps != null && blockedApps.contains(appInfo.packageName)) {
             dnsResponse = DnsMessage.servfailResponse(request.dnsPayload, question);
-            recordBypassBlocked(question.name);
-        } else if (scamThreat != null && scamThreat.blocked) {
-            dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
-            recordScamBlocked(question.name, scamThreat);
-        } else {
-            dnsResponse = responseCache.get(question.cacheKey(), question.id);
-            if (dnsResponse == null) {
-                try {
-                    long startMillis = SystemClock.elapsedRealtime();
-                    if (dohEnabled) {
-                        try {
-                            dnsResponse = forwardViaDoh(request.dnsPayload);
-                            recordDohQuery();
-                        } catch (IOException | RuntimeException dohError) {
-                            // Graceful fallback keeps protection working on restrictive networks
+            recordFirewallBlocked(question.name, "Internet blocked", appInfo.name, appInfo.packageName);
+        }
+
+        // Wi-Fi / Mobile data rules
+        if (dnsResponse == null) {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            android.net.NetworkCapabilities nc = null;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            }
+            boolean isWifi = nc != null && nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI);
+            boolean isMobile = nc != null && nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR);
+
+            if (isWifi) {
+                java.util.Set<String> blockedWifiApps = prefs.getStringSet(PreferenceKeys.KEY_FIREWALL_BLOCKED_WIFI, java.util.Collections.emptySet());
+                if (blockedWifiApps != null && blockedWifiApps.contains(appInfo.packageName)) {
+                    dnsResponse = DnsMessage.servfailResponse(request.dnsPayload, question);
+                    recordFirewallBlocked(question.name, "Blocked on Wi-Fi", appInfo.name, appInfo.packageName);
+                } else if (prefs.getBoolean("firewall_youtube_wifi", false) && question.name.contains("googlevideo.com")) {
+                    dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                    recordFirewallBlocked(question.name, "YouTube Ads blocked on Wi-Fi", appInfo.name, appInfo.packageName);
+                }
+            } else if (isMobile) {
+                java.util.Set<String> blockedMobileApps = prefs.getStringSet(PreferenceKeys.KEY_FIREWALL_BLOCKED_MOBILE, java.util.Collections.emptySet());
+                if (blockedMobileApps != null && blockedMobileApps.contains(appInfo.packageName)) {
+                    dnsResponse = DnsMessage.servfailResponse(request.dnsPayload, question);
+                    recordFirewallBlocked(question.name, "Blocked on Mobile Data", appInfo.name, appInfo.packageName);
+                }
+            }
+        }
+
+        // Country blocking
+        if (dnsResponse == null) {
+            java.util.Set<String> blockedCountries = prefs.getStringSet(PreferenceKeys.KEY_BLOCKED_COUNTRIES, java.util.Collections.emptySet());
+            if (blockedCountries != null && !blockedCountries.isEmpty()) {
+                String domain = question.name.toLowerCase(java.util.Locale.US);
+                for (String country : blockedCountries) {
+                    String tld = "." + country.toLowerCase(java.util.Locale.US);
+                    if (domain.endsWith(tld)) {
+                        dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                        recordFirewallBlocked(question.name, "Country Block (" + country.toUpperCase(java.util.Locale.US) + ")", appInfo.name, appInfo.packageName);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // India Regional Filter Pack
+        if (dnsResponse == null && prefs.getBoolean(PreferenceKeys.KEY_REGIONAL_PACK_INDIA, PreferenceKeys.DEFAULT_REGIONAL_PACK_INDIA)) {
+            String domain = question.name.toLowerCase(java.util.Locale.US);
+            if (domain.contains("crichd") || domain.contains("thoptv") || domain.contains("pikashow") 
+                || domain.contains("hotstar-ads") || domain.contains("voot-ads") || domain.contains("jiocinema-ads")
+                || domain.contains("flipkart-ads") || domain.contains("meesho-ads") || domain.contains("myntra-tracker")) {
+                dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                recordFirewallBlocked(question.name, "India Regional Pack (Ad/Popup Blocked)", appInfo.name, appInfo.packageName);
+            }
+        }
+
+        // Time-based rules
+        if (dnsResponse == null && prefs.getBoolean(PreferenceKeys.KEY_TIME_RULES_ENABLED, PreferenceKeys.DEFAULT_TIME_RULES_ENABLED)) {
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            int hour = cal.get(java.util.Calendar.HOUR_OF_DAY);
+            if (hour >= 22 || hour < 6) {
+                String domain = question.name.toLowerCase(java.util.Locale.US);
+                if (domain.contains("facebook.com") || domain.contains("instagram.com") || domain.contains("tiktok.com") || domain.contains("twitter.com") || domain.contains("x.com") || domain.contains("snapchat.com")) {
+                    dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                    recordFirewallBlocked(question.name, "Quiet Hours (Social Trackers Blocked)", appInfo.name, appInfo.packageName);
+                }
+            }
+        }
+
+        // Background app data blocker
+        if (dnsResponse == null && prefs.getBoolean(PreferenceKeys.KEY_BACKGROUND_BLOCK_ENABLED, PreferenceKeys.DEFAULT_BACKGROUND_BLOCK_ENABLED)) {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            boolean isScreenOn = pm != null && pm.isInteractive();
+            if (!isScreenOn) {
+                if (!appInfo.packageName.equals(getPackageName()) && !isEssentialSystemApp(appInfo.packageName)) {
+                    dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                    recordFirewallBlocked(question.name, "Background App (Screen Off)", appInfo.name, appInfo.packageName);
+                }
+            } else if (hasUsageStatsPermission() && !isAppInForeground(appInfo.packageName)) {
+                dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                recordFirewallBlocked(question.name, "Background App (Usage Stats)", appInfo.name, appInfo.packageName);
+            }
+        }
+
+        // 2. One-tap modes / Security Profiles
+        String securityMode = prefs.getString(PreferenceKeys.KEY_SECURITY_MODE, PreferenceKeys.DEFAULT_SECURITY_MODE);
+        if (dnsResponse == null) {
+            if ("strict".equals(securityMode) && isStrictBlock(question.name)) {
+                dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                recordFirewallBlocked(question.name, "Strict Security Policy", appInfo.name, appInfo.packageName);
+            } else if ("family".equals(securityMode) && isFamilyBlock(question.name)) {
+                dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                recordFirewallBlocked(question.name, "Family Mode Protection", appInfo.name, appInfo.packageName);
+            }
+        }
+
+        // 3. DNS resolve & standard blocker
+        if (dnsResponse == null) {
+            ScamDetector.Result scamThreat = scamThreat(question.name);
+            if (blocker.shouldBlock(question.name)) {
+                dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                if (blocker.isSecurityBlock(question.name)) {
+                    recordSecurityBlocked(question.name, appInfo.name, appInfo.packageName);
+                } else {
+                    recordBlocked(question.name, appInfo.name, appInfo.packageName);
+                }
+            } else if (bypassGuardEnabled
+                    && !blocker.isAllowed(question.name)
+                    && DnsBypassGuard.isBypassDomain(question.name, bypassExemptHost)) {
+                dnsResponse = DnsMessage.servfailResponse(request.dnsPayload, question);
+                recordBypassBlocked(question.name, appInfo.name, appInfo.packageName);
+            } else if (scamThreat != null && scamThreat.blocked) {
+                dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                recordScamBlocked(question.name, scamThreat, appInfo.name, appInfo.packageName);
+            } else {
+                dnsResponse = responseCache.get(question.cacheKey(), question.id);
+                if (dnsResponse == null) {
+                    try {
+                        long startMillis = SystemClock.elapsedRealtime();
+                        boolean useDoh = dohEnabled;
+                        String activeDohUrl = dohUrl;
+
+                        if ("gaming".equals(securityMode)) {
+                            useDoh = true;
+                            activeDohUrl = "https://cloudflare-dns.com/dns-query";
+                        } else if ("battery".equals(securityMode)) {
+                            useDoh = false;
+                        }
+
+                        if (useDoh) {
+                            try {
+                                String endpoint = (activeDohUrl != null && !activeDohUrl.isEmpty()) ? activeDohUrl : PreferenceKeys.DEFAULT_DOH_URL;
+                                dnsResponse = dohResolver.query(endpoint, request.dnsPayload);
+                                recordDohQuery();
+                            } catch (IOException | RuntimeException dohError) {
+                                dnsResponse = forwardToUpstream(request.dnsPayload);
+                                recordDohFallback();
+                                recordUpstreamLookup(SystemClock.elapsedRealtime() - startMillis);
+                            }
+                        } else {
                             dnsResponse = forwardToUpstream(request.dnsPayload);
-                            recordDohFallback();
                             recordUpstreamLookup(SystemClock.elapsedRealtime() - startMillis);
                         }
-                    } else {
-                        dnsResponse = forwardToUpstream(request.dnsPayload);
-                        recordUpstreamLookup(SystemClock.elapsedRealtime() - startMillis);
+
+                        int ttlSeconds = prefs.getInt(PreferenceKeys.KEY_CACHE_TTL_SECONDS, PreferenceKeys.DEFAULT_CACHE_TTL_SECONDS);
+                        if ("gaming".equals(securityMode)) {
+                            ttlSeconds = Math.max(ttlSeconds, 1800);
+                        } else if ("battery".equals(securityMode)) {
+                            ttlSeconds = Math.max(ttlSeconds, 3600);
+                        }
+
+                        responseCache.put(question.cacheKey(), dnsResponse, ttlSeconds);
+                        int latency = (int) (SystemClock.elapsedRealtime() - startMillis);
+                        recordAllowedQuery(question.name, useDoh ? "DoH resolved" : "Standard resolved", latency, appInfo.name, appInfo.packageName);
+                    } catch (IOException error) {
+                        dnsResponse = DnsMessage.servfailResponse(request.dnsPayload, question);
                     }
-                    int ttlSeconds = prefs.getInt(
-                            PreferenceKeys.KEY_CACHE_TTL_SECONDS,
-                            PreferenceKeys.DEFAULT_CACHE_TTL_SECONDS);
-                    responseCache.put(question.cacheKey(), dnsResponse, ttlSeconds);
-                    int latency = (int) (SystemClock.elapsedRealtime() - startMillis);
-                    recordAllowedQuery(question.name, dohEnabled ? "DoH resolved" : "Standard resolved", latency);
-                } catch (IOException error) {
-                    dnsResponse = DnsMessage.servfailResponse(request.dnsPayload, question);
+                } else {
+                    recordCacheHit();
+                    recordAllowedQuery(question.name, "Cache hit", 0, appInfo.name, appInfo.packageName);
                 }
-            } else {
-                recordCacheHit();
-                recordAllowedQuery(question.name, "Cache hit", 0);
+                recordAllowed();
             }
-            recordAllowed();
         }
 
         byte[] responsePacket = DnsPacket.buildUdpResponse(request, dnsResponse);
@@ -443,8 +565,6 @@ public final class ClearGuardVpnService extends VpnService {
                 PreferenceKeys.DEFAULT_UPSTREAM_DNS);
         InetAddress upstreamAddress = InetAddress.getByName(upstream);
 
-        // One socket per query keeps concurrent lookups independent and avoids
-        // matching responses to the wrong in-flight question.
         DatagramSocket socket = new DatagramSocket();
         try {
             protect(socket);
@@ -493,7 +613,6 @@ public final class ClearGuardVpnService extends VpnService {
                     bypassExemptHost = host.toLowerCase(java.util.Locale.US);
                 }
             } catch (IllegalArgumentException ignored) {
-                // A malformed custom URL simply gets no exemption.
             }
         }
     }
@@ -505,22 +624,34 @@ public final class ClearGuardVpnService extends VpnService {
         flushStats(false);
     }
 
-    private void recordBlocked(String domain) {
+    private void recordBlocked(String domain, String appName, String appPackage) {
         synchronized (statsLock) {
             pendingBlocked++;
         }
         countBlockedDomain(domain);
-        addRecentQuery(domain, "Blocklist rule", 0, true, "blocked", -1);
+        addRecentQuery(domain, "Blocklist rule", 0, true, "blocked", -1, appName, appPackage);
+        trackPrivacyStats(appPackage, appName, domain, true);
         flushStats(false);
     }
 
-    private void recordSecurityBlocked(String domain) {
+    private void recordSecurityBlocked(String domain, String appName, String appPackage) {
         synchronized (statsLock) {
             pendingBlocked++;
             pendingScamBlocked++;
         }
         countBlockedDomain(domain);
-        addRecentQuery(domain, "Security blocklist", 75, true, "threat", -1);
+        addRecentQuery(domain, "Security blocklist", 75, true, "threat", -1, appName, appPackage);
+        trackPrivacyStats(appPackage, appName, domain, true);
+        flushStats(false);
+    }
+
+    private void recordFirewallBlocked(String domain, String reason, String appName, String appPackage) {
+        synchronized (statsLock) {
+            pendingBlocked++;
+        }
+        countBlockedDomain(domain);
+        addRecentQuery(domain, "Firewall: " + reason, 50, true, "blocked", -1, appName, appPackage);
+        trackPrivacyStats(appPackage, appName, domain, true);
         flushStats(false);
     }
 
@@ -540,30 +671,34 @@ public final class ClearGuardVpnService extends VpnService {
         if (blocker.isAllowed(domain)) {
             return null;
         }
-        return ScamDetector.analyze(domain);
+        boolean religiousClean = prefs.getBoolean("religious_clean_enabled", false);
+        return ScamDetector.analyze(domain, religiousClean);
     }
 
-    private void recordScamBlocked(String domain, ScamDetector.Result threat) {
+    private void recordScamBlocked(String domain, ScamDetector.Result threat, String appName, String appPackage) {
         synchronized (statsLock) {
             pendingBlocked++;
             pendingScamBlocked++;
         }
         countBlockedDomain(domain);
-        addRecentQuery(domain, "Scam shield: " + threat.reason, threat.score, true, "threat", -1);
+        addRecentQuery(domain, "Scam shield: " + threat.reason, threat.score, true, "threat", -1, appName, appPackage);
+        trackPrivacyStats(appPackage, appName, domain, true);
         flushStats(false);
     }
 
-    private void recordBypassBlocked(String domain) {
+    private void recordBypassBlocked(String domain, String appName, String appPackage) {
         synchronized (statsLock) {
             pendingBlocked++;
         }
         countBlockedDomain(domain);
-        addRecentQuery(domain, "Bypass guard: private DNS sidestep", 0, true, "bypass", -1);
+        addRecentQuery(domain, "Bypass guard: private DNS sidestep", 0, true, "bypass", -1, appName, appPackage);
+        trackPrivacyStats(appPackage, appName, domain, true);
         flushStats(false);
     }
 
-    private void recordAllowedQuery(String domain, String reason, int latencyMs) {
-        addRecentQuery(domain, reason, 0, false, "allowed", latencyMs);
+    private void recordAllowedQuery(String domain, String reason, int latencyMs, String appName, String appPackage) {
+        addRecentQuery(domain, reason, 0, false, "allowed", latencyMs, appName, appPackage);
+        trackPrivacyStats(appPackage, appName, domain, false);
     }
 
     private void recordCacheHit() {
@@ -634,18 +769,18 @@ public final class ClearGuardVpnService extends VpnService {
             blockedTodaySnapshot = blockedToday;
 
             editor = prefs.edit()
-                .putLong(PreferenceKeys.KEY_ALLOWED_COUNT, allowedTotal)
-                .putLong(PreferenceKeys.KEY_BLOCKED_COUNT, blockedTotal)
-                .putLong(PreferenceKeys.KEY_BLOCKED_TODAY, blockedToday)
-                .putLong(PreferenceKeys.KEY_CACHE_HIT_COUNT, cacheHitTotal)
-                .putLong(PreferenceKeys.KEY_SCAM_BLOCKED_COUNT, scamBlockedTotal)
-                .putLong(PreferenceKeys.KEY_SCAM_BLOCKED_TODAY, scamBlockedToday)
-                .putString(PreferenceKeys.KEY_LAST_BLOCK_DAY, lastBlockDay)
-                .putFloat(PreferenceKeys.KEY_UPSTREAM_AVERAGE_LATENCY_MS, upstreamAverageLatencyMs)
-                .putLong(PreferenceKeys.KEY_UPSTREAM_QUERY_COUNT, upstreamQueryTotal)
-                .putLong(PreferenceKeys.KEY_DOH_QUERY_COUNT, dohQueryTotal)
-                .putLong(PreferenceKeys.KEY_DOH_FALLBACK_COUNT, dohFallbackTotal)
-                .putString(PreferenceKeys.KEY_TOP_BLOCKED_JSON, topBlockedJson());
+                    .putLong(PreferenceKeys.KEY_ALLOWED_COUNT, allowedTotal)
+                    .putLong(PreferenceKeys.KEY_BLOCKED_COUNT, blockedTotal)
+                    .putLong(PreferenceKeys.KEY_BLOCKED_TODAY, blockedToday)
+                    .putLong(PreferenceKeys.KEY_CACHE_HIT_COUNT, cacheHitTotal)
+                    .putLong(PreferenceKeys.KEY_SCAM_BLOCKED_COUNT, scamBlockedTotal)
+                    .putLong(PreferenceKeys.KEY_SCAM_BLOCKED_TODAY, scamBlockedToday)
+                    .putString(PreferenceKeys.KEY_LAST_BLOCK_DAY, lastBlockDay)
+                    .putFloat(PreferenceKeys.KEY_UPSTREAM_AVERAGE_LATENCY_MS, upstreamAverageLatencyMs)
+                    .putLong(PreferenceKeys.KEY_UPSTREAM_QUERY_COUNT, upstreamQueryTotal)
+                    .putLong(PreferenceKeys.KEY_DOH_QUERY_COUNT, dohQueryTotal)
+                    .putLong(PreferenceKeys.KEY_DOH_FALLBACK_COUNT, dohFallbackTotal)
+                    .putString(PreferenceKeys.KEY_TOP_BLOCKED_JSON, topBlockedJson());
         }
 
         editor.apply();
@@ -671,11 +806,9 @@ public final class ClearGuardVpnService extends VpnService {
                 }
             }
         } catch (org.json.JSONException ignored) {
-            // A corrupt blob just means the leaderboard starts fresh.
         }
     }
 
-    /** Serializes the highest counters and trims the in-memory map so it stays bounded. */
     private String topBlockedJson() {
         java.util.List<java.util.Map.Entry<String, Long>> entries =
                 new java.util.ArrayList<>(blockedDomainCounts.entrySet());
@@ -728,7 +861,7 @@ public final class ClearGuardVpnService extends VpnService {
 
         return builder
                 .setSmallIcon(android.R.drawable.ic_secure)
-                .setContentTitle("ClearGuard")
+                .setContentTitle("ShieldDNS")
                 .setContentText(text)
                 .setContentIntent(buildConfigureIntent())
                 .setOngoing(true)
@@ -750,9 +883,9 @@ public final class ClearGuardVpnService extends VpnService {
         }
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
-                "ClearGuard VPN",
+                "ShieldDNS VPN",
                 NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("Shows when local DNS filtering is active.");
+        channel.setDescription("Shows when ShieldDNS local filtering is active.");
         NotificationManager manager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
@@ -779,6 +912,310 @@ public final class ClearGuardVpnService extends VpnService {
         }
     }
 
+    // Heuristic helpers
+    private AppInfo getAppInfoForRequest(DnsPacket.Request request) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return new AppInfo("System / Unknown", "unknown");
+        }
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return new AppInfo("System / Unknown", "unknown");
+
+            java.net.InetAddress srcAddr = java.net.InetAddress.getByAddress(request.sourceAddress);
+            java.net.InetAddress dstAddr = java.net.InetAddress.getByAddress(request.destinationAddress);
+
+            java.net.InetSocketAddress local = new java.net.InetSocketAddress(srcAddr, request.sourcePort);
+            java.net.InetSocketAddress remote = new java.net.InetSocketAddress(dstAddr, 53);
+
+            int uid = cm.getConnectionOwnerUid(17, local, remote); // 17 is OsConstants.IPPROTO_UDP
+            if (uid == android.os.Process.INVALID_UID) {
+                return new AppInfo("System / Unknown", "unknown");
+            }
+
+            PackageManager pm = getPackageManager();
+            String[] packages = pm.getPackagesForUid(uid);
+            if (packages != null && packages.length > 0) {
+                String pkg = packages[0];
+                String name = pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
+                return new AppInfo(name, pkg);
+            }
+        } catch (Exception ignored) {
+        }
+        return new AppInfo("System / Unknown", "unknown");
+    }
+
+    private boolean isEssentialSystemApp(String packageName) {
+        if (packageName == null || packageName.equals("unknown")) return true;
+        return packageName.startsWith("android")
+                || packageName.startsWith("com.android")
+                || packageName.startsWith("com.google.android.gms")
+                || packageName.contains("services")
+                || packageName.contains("providers");
+    }
+
+    private boolean hasUsageStatsPermission() {
+        try {
+            android.app.AppOpsManager appOps = (android.app.AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
+            int mode = appOps.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    android.os.Process.myUid(), getPackageName());
+            return mode == android.app.AppOpsManager.MODE_ALLOWED;
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private boolean isAppInForeground(String packageName) {
+        if (packageName == null || packageName.equals("unknown") || isEssentialSystemApp(packageName)) {
+            return true;
+        }
+        try {
+            android.app.usage.UsageStatsManager usm = (android.app.usage.UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+            long now = System.currentTimeMillis();
+            android.app.usage.UsageEvents events = usm.queryEvents(now - 15000, now);
+            android.app.usage.UsageEvents.Event event = new android.app.usage.UsageEvents.Event();
+            String lastForegroundApp = null;
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event);
+                if (event.getEventType() == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
+                    lastForegroundApp = event.getPackageName();
+                }
+            }
+            if (lastForegroundApp != null) {
+                return lastForegroundApp.equals(packageName);
+            }
+        } catch (Exception ignored) {
+        }
+        return true;
+    }
+
+    private boolean isStrictBlock(String domain) {
+        String name = domain.toLowerCase(java.util.Locale.US);
+        if (name.contains("facebook.net") || name.contains("connect.facebook")
+                || name.contains("platform.twitter") || name.contains("syndication.twitter")
+                || name.contains("platform.instagram") || name.contains("widget.tiktok")) {
+            return true;
+        }
+        if (name.contains("fingerprintjs") || name.contains("deviceinfo") || name.contains("browser-fingerprint")) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isFamilyBlock(String domain) {
+        String name = domain.toLowerCase(java.util.Locale.US);
+        if (name.contains("porn") || name.contains("sex") || name.contains("xxx")
+                || name.contains("xvideos") || name.contains("xnxx") || name.contains("onlyfans")
+                || name.contains("cam4") || name.contains("chaturbate")) {
+            return true;
+        }
+        if (name.contains("bet") || name.contains("casino") || name.contains("gambling")
+                || name.contains("poker") || name.contains("stake.com") || name.contains("draftkings")
+                || name.contains("roobet") || name.contains("bet365")) {
+            return true;
+        }
+        if (name.contains("tiktok.com") || name.contains("byteoversea") || name.contains("kwai.com")) {
+            return true;
+        }
+        return false;
+    }
+
+    private void trackPrivacyStats(String packageName, String appName, String domain, boolean blocked) {
+        if (packageName == null || packageName.equals("unknown")) return;
+        AppStats stats = APP_PRIVACY_STATS.computeIfAbsent(packageName, k -> new AppStats(packageName, appName));
+        synchronized (stats) {
+            stats.totalQueries++;
+            if (blocked) {
+                stats.blockedQueries++;
+                String tracker = getTrackerCompany(domain);
+                if (tracker != null) {
+                    stats.trackers.merge(domain, 1L, Long::sum);
+                }
+            }
+        }
+    }
+
+    private void registerWifiProtection() {
+        if (!prefs.getBoolean(PreferenceKeys.KEY_WIFI_PROTECTION_ENABLED, PreferenceKeys.DEFAULT_WIFI_PROTECTION_ENABLED)) {
+            return;
+        }
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return;
+
+            android.net.NetworkRequest request = new android.net.NetworkRequest.Builder()
+                    .addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+                    .build();
+
+            wifiProtectionCallback = new ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onAvailable(android.net.Network network) {
+                    super.onAvailable(network);
+                    if (isWifiUnsecured()) {
+                        sendWifiAlertNotification();
+                    }
+                }
+            };
+            cm.registerNetworkCallback(request, wifiProtectionCallback);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void unregisterWifiProtection() {
+        if (wifiProtectionCallback != null) {
+            try {
+                ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+                if (cm != null) {
+                    cm.unregisterNetworkCallback(wifiProtectionCallback);
+                }
+            } catch (Exception ignored) {
+            }
+            wifiProtectionCallback = null;
+        }
+    }
+
+    private boolean isWifiUnsecured() {
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm == null) return false;
+            WifiInfo info = wm.getConnectionInfo();
+            if (info == null) return false;
+
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            android.net.NetworkCapabilities capabilities = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            if (capabilities != null) {
+                if (capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)) {
+                    return true;
+                }
+            }
+
+            String ssid = info.getSSID();
+            if (ssid != null) {
+                String lower = ssid.toLowerCase(java.util.Locale.US);
+                if (lower.contains("public") || lower.contains("guest") || lower.contains("free") || lower.contains("open") || lower.contains("airport") || lower.contains("hotel")) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private void sendWifiAlertNotification() {
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return;
+
+        Intent intent = new Intent(this, MainActivity.class);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 99, intent, flags);
+
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Notification.Builder(this, CHANNEL_ID)
+                : new Notification.Builder(this);
+
+        Notification notification = builder
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle(getString(com.clearguard.app.R.string.unsafe_wifi_title))
+                .setContentText(getString(com.clearguard.app.R.string.unsafe_wifi_text))
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .build();
+
+        manager.notify(102, notification);
+    }
+
+    private static class AppInfo {
+        final String name;
+        final String packageName;
+
+        AppInfo(String name, String packageName) {
+            this.name = name;
+            this.packageName = packageName;
+        }
+    }
+
+    // App Stats structure for Privacy Audit
+    public static final class AppStats {
+        public final String packageName;
+        public final String appName;
+        public long totalQueries;
+        public long blockedQueries;
+        public final java.util.concurrent.ConcurrentHashMap<String, Long> trackers = new java.util.concurrent.ConcurrentHashMap<>();
+
+        public AppStats(String packageName, String appName) {
+            this.packageName = packageName;
+            this.appName = appName;
+        }
+    }
+
+    public static final class TrackerConnection {
+        public final String appName;
+        public final String appPackage;
+        public final String companyName;
+        public final String domain;
+        public final long count;
+
+        public TrackerConnection(String appName, String appPackage, String companyName, String domain, long count) {
+            this.appName = appName;
+            this.appPackage = appPackage;
+            this.companyName = companyName;
+            this.domain = domain;
+            this.count = count;
+        }
+    }
+
+    public static java.util.List<TrackerConnection> getTrackerConnections() {
+        java.util.List<TrackerConnection> list = new java.util.ArrayList<>();
+        for (AppStats stats : APP_PRIVACY_STATS.values()) {
+            for (java.util.Map.Entry<String, Long> entry : stats.trackers.entrySet()) {
+                String domain = entry.getKey();
+                String company = getTrackerCompany(domain);
+                if (company != null) {
+                    list.add(new TrackerConnection(stats.appName, stats.packageName, company, domain, entry.getValue()));
+                }
+            }
+        }
+        return list;
+    }
+
+    public static String getTrackerCompany(String domain) {
+        if (domain == null) return null;
+        String lower = domain.toLowerCase(java.util.Locale.US);
+        if (lower.contains("google-analytics") || lower.contains("doubleclick") || lower.contains("googlead") || lower.contains("crashlytics") || lower.contains("adservice") || lower.contains("googletag")) {
+            return "Google";
+        }
+        if (lower.contains("facebook") || lower.contains("fbcdn") || lower.contains("instagram") || lower.contains("messenger")) {
+            return "Meta";
+        }
+        if (lower.contains("tiktok") || lower.contains("byteoversea") || lower.contains("bytedance")) {
+            return "ByteDance";
+        }
+        if (lower.contains("amazon-ad") || lower.contains("assoc-amazon")) {
+            return "Amazon";
+        }
+        if (lower.contains("adnxs") || lower.contains("microsoft") || lower.contains("clarity.ms") || lower.contains("app-measurement")) {
+            return "Microsoft";
+        }
+        if (lower.contains("scorecardresearch")) {
+            return "Comscore";
+        }
+        if (lower.contains("hotjar")) {
+            return "Hotjar";
+        }
+        if (lower.contains("amplitude")) {
+            return "Amplitude";
+        }
+        if (lower.contains("mixpanel")) {
+            return "Mixpanel";
+        }
+        if (lower.contains("flurry") || lower.contains("yahoo")) {
+            return "Yahoo";
+        }
+        return null;
+    }
+
     /** A single recent DNS query. Held in memory only, never written to disk. */
     public static final class BlockedQuery {
         public final String domain;
@@ -788,8 +1225,10 @@ public final class ClearGuardVpnService extends VpnService {
         public final boolean blocked;
         public final String status; // "allowed", "blocked", "threat", "bypass"
         public final int latencyMs; // -1 for cache hits or blocks
+        public final String appName;
+        public final String appPackage;
 
-        BlockedQuery(String domain, long timeMillis, String reason, int threatScore, boolean blocked, String status, int latencyMs) {
+        BlockedQuery(String domain, long timeMillis, String reason, int threatScore, boolean blocked, String status, int latencyMs, String appName, String appPackage) {
             this.domain = domain;
             this.timeMillis = timeMillis;
             this.reason = reason;
@@ -797,6 +1236,8 @@ public final class ClearGuardVpnService extends VpnService {
             this.blocked = blocked;
             this.status = status;
             this.latencyMs = latencyMs;
+            this.appName = appName;
+            this.appPackage = appPackage;
         }
     }
 }
