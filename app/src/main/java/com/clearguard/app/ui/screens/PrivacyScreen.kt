@@ -47,8 +47,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.sp
+import com.clearguard.app.PreferenceKeys
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardCompact
+import com.clearguard.app.ui.components.LiquidGlassButton
 import com.clearguard.app.ui.theme.ClearColors
 import com.clearguard.app.ui.theme.ClearDesign
 import com.clearguard.app.vpn.ClearGuardVpnService
@@ -753,7 +755,7 @@ fun ScamScreenshotScanner() {
                     bitmap = bmp
 
                     // Run on-device OCR + Indian Scam Shield analysis
-                    val dets = ScamScreenshotAnalyzer.analyze(bmp)
+                    val dets = ScamScreenshotAnalyzer.analyze(context, bmp)
                     detections = dets
 
                     // Build display text from snippets + attempt domain extraction

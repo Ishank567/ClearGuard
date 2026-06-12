@@ -610,7 +610,7 @@ fun GlassBottomNavigation(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LightClick)
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 onScreenSelected(screen)
                             },
                         horizontalAlignment = Alignment.CenterHorizontally,

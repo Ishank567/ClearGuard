@@ -8,8 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
-import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
@@ -385,7 +385,7 @@ object OnDeviceRuleEngine {
             try {
                 val request = Request.Builder()
                     .url(url)
-                    .post(RequestBody.create(MediaType.parse("application/json"), jsonBody))
+                    .post(jsonBody.toRequestBody("application/json".toMediaType()))
                     .header("Authorization", "Bearer ${getApiKeyOrStub()}")
                     .header("X-Client", "ClearGuard-Enterprise")
                     .header("X-Request-ID", java.util.UUID.randomUUID().toString()) // for tracing
@@ -421,7 +421,6 @@ object OnDeviceRuleEngine {
             phones: List<String>
         ): List<RiskResult> {
             return queryBatchRisk(context, phones).filter { it.isHighRisk }
-        }
         }
 
         private fun getApiKeyOrStub(): String {
@@ -471,7 +470,6 @@ object OnDeviceRuleEngine {
 
         notificationManager.notify(phone.hashCode(), notification)
     }
-}
 
     // === UPI Payee Verification (parse + risk) ===
     // Parses upi://pay?pa=...&pn=PayeeName&am=... etc.

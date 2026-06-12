@@ -298,7 +298,7 @@ fun DashboardScreen(
             text = PreferenceKeys.modeDescription(currentMode),
             fontSize = 11.sp,
             color = ClearColors.muted,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, top = 2.dp)
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 2.dp)
         )
 
         GlassCard(
@@ -439,13 +439,14 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun ModePill(
+private fun RowScope.ModePill(
     modeId: String,
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     selected: Boolean,
     onSelect: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     // Animated scale bounce on selection
     val pillScale by animateFloatAsState(
         targetValue = if (selected) ClearDesign.pillSelectedScale else 1f,

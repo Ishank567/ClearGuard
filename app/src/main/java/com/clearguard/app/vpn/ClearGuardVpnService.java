@@ -1308,12 +1308,10 @@ public final class ClearGuardVpnService extends VpnService {
         if (lower.contains("razorpay") || lower.contains("payu") || lower.contains("cashfree")) {
             return "Payments";
         }
-        return "Other Ad / Analytics";
-    }
         if (lower.contains("flurry") || lower.contains("yahoo")) {
             return "Yahoo";
         }
-        return null;
+        return "Other Ad / Analytics";
     }
 
     /** A single recent DNS query. Held in memory only, never written to disk. */

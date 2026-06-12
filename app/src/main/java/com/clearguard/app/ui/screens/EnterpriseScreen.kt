@@ -192,12 +192,14 @@ fun EnterpriseScreen() {
                 Spacer(modifier = Modifier.height(24.dp))
 
                 LiquidGlassButton(
-                    text = "Contact Sales",
-                    icon = Icons.Default.Star,
                     onClick = { /* No-op for showcase */ },
                     accent = ClearColors.blue,
                     modifier = Modifier.fillMaxWidth()
-                )
+                ) {
+                    Icon(Icons.Default.Star, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Contact Sales")
+                }
             }
         }
 

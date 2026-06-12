@@ -1,5 +1,6 @@
 package com.clearguard.app.security
 
+import android.content.Context
 import android.graphics.Bitmap
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
@@ -40,22 +41,24 @@ object ScamScreenshotAnalyzer {
     private val FAKE_CUSTOMER_SUPPORT = listOf("customer care", "helpline", "toll free", "1800", "call now", "customer support", "support number", "whatsapp support", "refund helpline", "official support")
     private val FAKE_APK = listOf("install apk", "download apk", "claim reward apk", "get apk", "fake app", "install app", "apk link", "direct apk")
 
+    private val PHONE_REGEX = Regex("\\b(?:\\+?91|0)?[6-9]\\d{9}\\b")
+
     /**
      * Main entry: pick a Bitmap (from screenshot), run OCR then scan.
      */
-    suspend fun analyze(bitmap: Bitmap): List<Detection> = suspendCancellableCoroutine { continuation ->
+    suspend fun analyze(context: Context, bitmap: Bitmap): List<Detection> = suspendCancellableCoroutine { continuation ->
         val image = InputImage.fromBitmap(bitmap, 0)
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
                 val fullText = visionText.text.lowercase()
-                val detections = scanText(fullText, visionText)
+                val detections = scanText(context, fullText, visionText).toMutableList()
 
                 // === Multi-modal Phishing Engine (regex + TFLite + UPI/QR/Phone risk) ===
                 try {
                     val upi = com.clearguard.app.security.OnDeviceRuleEngine.parseUpiLink(fullText)
-                    val phone = phoneRegex.find(fullText)?.value
+                    val phone = PHONE_REGEX.find(fullText)?.value
                     val multiRes = com.clearguard.app.security.OnDeviceRuleEngine.multiModalClassify(fullText, null, phone, upi)
                     if (multiRes.isPhishing || multiRes.score >= 60) {
                         detections.add(
@@ -69,7 +72,7 @@ object ScamScreenshotAnalyzer {
                     }
 
                     // TFLite (if enabled)
-                    val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                    val prefs = com.clearguard.app.PreferenceKeys.prefs(context)
                     val tfliteOn = prefs.getBoolean(
                         com.clearguard.app.PreferenceKeys.KEY_PHISHING_TFLITE_ENABLED,
                         com.clearguard.app.PreferenceKeys.DEFAULT_PHISHING_TFLITE_ENABLED
@@ -98,7 +101,7 @@ object ScamScreenshotAnalyzer {
             }
     }
 
-    private fun scanText(fullText: String, visionText: Text): List<Detection> {
+    private fun scanText(context: Context, fullText: String, visionText: Text): List<Detection> {
         val results = mutableListOf<Detection>()
 
         // Helper to find best snippet
@@ -136,9 +139,8 @@ object ScamScreenshotAnalyzer {
         addIfMatch("Fake APK link", FAKE_APK, 85)
 
         // Bonus: detect phone numbers + customer support language (very common in these scams)
-        val phoneRegex = Regex("\\b(?:\\+?91|0)?[6-9]\\d{9}\\b")
-        if (phoneRegex.containsMatchIn(fullText) && fullText.containsAny(FAKE_CUSTOMER_SUPPORT)) {
-            val match = phoneRegex.find(fullText)?.value ?: ""
+        if (PHONE_REGEX.containsMatchIn(fullText) && fullText.containsAny(FAKE_CUSTOMER_SUPPORT)) {
+            val match = PHONE_REGEX.find(fullText)?.value ?: ""
             results.add(Detection("Fake customer support", "Phone number + support language detected", "Phone: $match", 88))
         }
 
@@ -157,9 +159,9 @@ object ScamScreenshotAnalyzer {
         }
 
         // Phone risk scoring (FRI-like) - gated by setting
-        val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        val prefs = com.clearguard.app.PreferenceKeys.prefs(context)
         if (prefs.getBoolean(com.clearguard.app.PreferenceKeys.KEY_MOBILE_RISK_SCORING_ENABLED, com.clearguard.app.PreferenceKeys.DEFAULT_MOBILE_RISK_SCORING_ENABLED)) {
-            val phones = phoneRegex.findAll(fullText).map { it.value }.toList()
+            val phones = PHONE_REGEX.findAll(fullText).map { it.value }.toList()
             phones.forEach { ph ->
                 val phoneRisk = com.clearguard.app.security.OnDeviceRuleEngine.phoneRiskScore(ph, fullText)
                 if (phoneRisk > 40) {
