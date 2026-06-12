@@ -269,7 +269,7 @@ fun SettingsScreen(
                 ) {
                     Text("Block Apps on Mobile Data (${blockedMobileApps.size})", fontSize = 13.sp, color = ClearColors.text)
                     IconButton(onClick = { appPickerDialogType = "block_mobile" }) {
-                        Icon(Icons.Default.CellularData, contentDescription = null, tint = ClearColors.green)
+                        Icon(Icons.Default.SignalCellularAlt, contentDescription = null, tint = ClearColors.green)
                     }
                 }
 
