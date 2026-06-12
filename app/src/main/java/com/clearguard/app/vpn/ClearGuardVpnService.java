@@ -443,6 +443,14 @@ public final class ClearGuardVpnService extends VpnService {
             }
         }
 
+        // Data Saver: heavy ad/video-ad networks account for a large share of page
+        // bytes on mobile. Blocking them at DNS level cuts data usage directly.
+        if (dnsResponse == null && prefs.getBoolean(PreferenceKeys.KEY_DATA_SAVER_ENABLED, PreferenceKeys.DEFAULT_DATA_SAVER_ENABLED)
+                && isHeavyAdHost(question.name)) {
+            dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+            recordFirewallBlocked(question.name, "Data Saver (heavy ad network)", appInfo.name, appInfo.packageName);
+        }
+
         // Time-based rules
         if (dnsResponse == null && prefs.getBoolean(PreferenceKeys.KEY_TIME_RULES_ENABLED, PreferenceKeys.DEFAULT_TIME_RULES_ENABLED)) {
             java.util.Calendar cal = java.util.Calendar.getInstance();
@@ -570,6 +578,30 @@ public final class ClearGuardVpnService extends VpnService {
             output.write(responsePacket);
             output.flush();
         }
+    }
+
+    // Ad networks that serve the heaviest payloads (video ads, rich-media creatives,
+    // viewability scripts). Used by Data Saver mode; suffix-matched against queries.
+    private static final String[] HEAVY_AD_HOSTS = {
+            "2mdn.net", "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+            "adsafeprotected.com", "moatads.com", "amazon-adsystem.com", "criteo.com",
+            "criteo.net", "taboola.com", "outbrain.com", "mgid.com", "adcolony.com",
+            "applovin.com", "inmobi.com", "smaato.net", "pubmatic.com", "rubiconproject.com",
+            "openx.net", "innovid.com", "springserve.com", "spotxchange.com", "teads.tv",
+            "unityads.unity3d.com", "vungle.com", "ironsrc.com", "chartboost.com"
+    };
+
+    private static boolean isHeavyAdHost(String domain) {
+        if (domain == null) {
+            return false;
+        }
+        String lower = domain.toLowerCase(java.util.Locale.US);
+        for (String host : HEAVY_AD_HOSTS) {
+            if (lower.equals(host) || lower.endsWith("." + host)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private byte[] forwardToUpstream(byte[] dnsPayload) throws IOException {
@@ -727,7 +759,7 @@ public final class ClearGuardVpnService extends VpnService {
         // append risk score to the activity log for "high-risk sender" vetting.
         try {
             com.clearguard.app.security.OnDeviceRuleEngine.ClassificationResult riskRes =
-                com.clearguard.app.security.OnDeviceRuleEngine.classify(domain + " " + threat.reason, domain);
+                com.clearguard.app.security.OnDeviceRuleEngine.INSTANCE.classify(domain + " " + threat.reason, domain);
             if (riskRes.isPhishing() || riskRes.getScore() >= 60) {
                 displayReason = displayReason + " [FRI Risk:" + riskRes.getScore() + " - high-risk sender per local DB]";
             }

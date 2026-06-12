@@ -319,6 +319,31 @@ fun SettingsScreen(
                         }
                     )
                 }
+
+                // Data Saver mode
+                var dataSaver by remember {
+                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_DATA_SAVER_ENABLED, PreferenceKeys.DEFAULT_DATA_SAVER_ENABLED))
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Data Saver", fontSize = 13.sp, color = ClearColors.text)
+                        Text("Blocks heavy video-ad and rich-media networks to cut mobile data use", fontSize = 11.sp, color = ClearColors.muted)
+                    }
+                    ClearSwitch(
+                        checked = dataSaver,
+                        onCheckedChange = {
+                            dataSaver = it
+                            prefs.edit().putBoolean(PreferenceKeys.KEY_DATA_SAVER_ENABLED, it).apply()
+                            ClearGuardVpnService.reloadIfRunning(context)
+                        }
+                    )
+                }
             }
         }
 

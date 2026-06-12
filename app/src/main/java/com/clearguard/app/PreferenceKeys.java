@@ -66,6 +66,7 @@ public final class PreferenceKeys {
     public static final String KEY_SECURITY_MODE = "security_mode";
     public static final String KEY_WIFI_PROTECTION_ENABLED = "wifi_protection_enabled";
     public static final String KEY_REGIONAL_PACK_INDIA = "regional_pack_india";
+    public static final String KEY_DATA_SAVER_ENABLED = "data_saver_enabled";
     public static final String KEY_BROWSER_COOKIE_REMOVER = "browser_cookie_remover";
     public static final String KEY_BROWSER_ANTI_FINGERPRINT = "browser_anti_fingerprint";
     public static final String KEY_BROWSER_CLEANER_RULES = "browser_cleaner_rules";
@@ -130,6 +131,7 @@ public final class PreferenceKeys {
     public static final boolean DEFAULT_BACKGROUND_BLOCK_ENABLED = false;
     public static final boolean DEFAULT_WIFI_PROTECTION_ENABLED = true;
     public static final boolean DEFAULT_REGIONAL_PACK_INDIA = false;
+    public static final boolean DEFAULT_DATA_SAVER_ENABLED = false;
     public static final boolean DEFAULT_BROWSER_COOKIE_REMOVER = true;
     public static final boolean DEFAULT_BROWSER_ANTI_FINGERPRINT = true;
     public static final boolean DEFAULT_BROWSER_DARK_PATTERN_BLOCKER = true;
