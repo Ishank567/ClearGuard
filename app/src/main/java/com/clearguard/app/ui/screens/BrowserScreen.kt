@@ -55,6 +55,43 @@ fun BrowserScreen() {
     }
     var elementCleanerMode by remember { mutableStateOf(false) }
 
+    // New toggles for Dark Pattern + Fake Customer Care (tied to Indian Scam Shield / Elder mode vibe)
+    var darkPatternBlocker by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BROWSER_DARK_PATTERN_BLOCKER, PreferenceKeys.DEFAULT_BROWSER_DARK_PATTERN_BLOCKER))
+    }
+    var phoneCareWarner by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BROWSER_FAKE_PHONE_WARNER, PreferenceKeys.DEFAULT_BROWSER_FAKE_PHONE_WARNER))
+    }
+
+    // Anti-adblock bypass tools (advanced, opt-in)
+    var scriptletInjection by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BROWSER_SCRIPTLET_INJECTION, PreferenceKeys.DEFAULT_BROWSER_SCRIPTLET_INJECTION))
+    }
+    var antiAdblockDefuser by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BROWSER_ANTI_ADBLOCK_DEFUSER, PreferenceKeys.DEFAULT_BROWSER_ANTI_ADBLOCK_DEFUSER))
+    }
+    var popupTrapBlocker by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BROWSER_POPUP_TRAP_BLOCKER, PreferenceKeys.DEFAULT_BROWSER_POPUP_TRAP_BLOCKER))
+    }
+    var redirectChainCleaner by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BROWSER_REDIRECT_CHAIN_CLEANER, PreferenceKeys.DEFAULT_BROWSER_REDIRECT_CHAIN_CLEANER))
+    }
+    var antiPaywallWarning by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BROWSER_ANTI_PAYWALL_WARNING, PreferenceKeys.DEFAULT_BROWSER_ANTI_PAYWALL_WARNING))
+    }
+    var sponsoredWidgetRemover by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BROWSER_SPONSORED_WIDGET_REMOVER, PreferenceKeys.DEFAULT_BROWSER_SPONSORED_WIDGET_REMOVER))
+    }
+    var fakeCountdownRemover by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BROWSER_FAKE_COUNTDOWN_REMOVER, PreferenceKeys.DEFAULT_BROWSER_FAKE_COUNTDOWN_REMOVER))
+    }
+    var overlayRemover by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_BROWSER_OVERLAY_REMOVER, PreferenceKeys.DEFAULT_BROWSER_OVERLAY_REMOVER))
+    }
+
+    // On-device rule engine + TFLite phishing classification (text + current URL)
+    var phishingRisk by remember { mutableStateOf<com.clearguard.app.security.PhishingClassifier.PhishingResult?>(null) }
+
     // Indian Regional Clean mode rules (fake download, job fraud warning inside WebView)
     var fakeDownloadBlockedAlert by remember { mutableStateOf(false) }
 
@@ -149,6 +186,166 @@ fun BrowserScreen() {
                             }
                         }
                     )
+                    ShieldTogglePill(
+                        label = "Dark Patterns",
+                        active = darkPatternBlocker,
+                        onClick = {
+                            darkPatternBlocker = !darkPatternBlocker
+                            prefs.edit().putBoolean(PreferenceKeys.KEY_BROWSER_DARK_PATTERN_BLOCKER, darkPatternBlocker).apply()
+                            webView?.reload()
+                        }
+                    )
+                    ShieldTogglePill(
+                        label = "Phone Shield",
+                        active = phoneCareWarner,
+                        onClick = {
+                            phoneCareWarner = !phoneCareWarner
+                            prefs.edit().putBoolean(PreferenceKeys.KEY_BROWSER_FAKE_PHONE_WARNER, phoneCareWarner).apply()
+                            webView?.reload()
+                        }
+                    )
+                }
+            }
+            // Second row for advanced anti-adblock bypass tools (opt-in for advanced users)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ShieldTogglePill(
+                    label = "Scriptlets",
+                    active = scriptletInjection,
+                    onClick = {
+                        scriptletInjection = !scriptletInjection
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_BROWSER_SCRIPTLET_INJECTION, scriptletInjection).apply()
+                        webView?.reload()
+                    }
+                )
+                ShieldTogglePill(
+                    label = "Defuser",
+                    active = antiAdblockDefuser,
+                    onClick = {
+                        antiAdblockDefuser = !antiAdblockDefuser
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_BROWSER_ANTI_ADBLOCK_DEFUSER, antiAdblockDefuser).apply()
+                        webView?.reload()
+                    }
+                )
+                ShieldTogglePill(
+                    label = "Popup Trap",
+                    active = popupTrapBlocker,
+                    onClick = {
+                        popupTrapBlocker = !popupTrapBlocker
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_BROWSER_POPUP_TRAP_BLOCKER, popupTrapBlocker).apply()
+                        webView?.reload()
+                    }
+                )
+                ShieldTogglePill(
+                    label = "Redirect",
+                    active = redirectChainCleaner,
+                    onClick = {
+                        redirectChainCleaner = !redirectChainCleaner
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_BROWSER_REDIRECT_CHAIN_CLEANER, redirectChainCleaner).apply()
+                        webView?.reload()
+                    }
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ShieldTogglePill(
+                    label = "Paywall Warn",
+                    active = antiPaywallWarning,
+                    onClick = {
+                        antiPaywallWarning = !antiPaywallWarning
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_BROWSER_ANTI_PAYWALL_WARNING, antiPaywallWarning).apply()
+                        webView?.reload()
+                    }
+                )
+                ShieldTogglePill(
+                    label = "Sponsored",
+                    active = sponsoredWidgetRemover,
+                    onClick = {
+                        sponsoredWidgetRemover = !sponsoredWidgetRemover
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_BROWSER_SPONSORED_WIDGET_REMOVER, sponsoredWidgetRemover).apply()
+                        webView?.reload()
+                    }
+                )
+                ShieldTogglePill(
+                    label = "Countdown",
+                    active = fakeCountdownRemover,
+                    onClick = {
+                        fakeCountdownRemover = !fakeCountdownRemover
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_BROWSER_FAKE_COUNTDOWN_REMOVER, fakeCountdownRemover).apply()
+                        webView?.reload()
+                    }
+                )
+                ShieldTogglePill(
+                    label = "Overlay",
+                    active = overlayRemover,
+                    onClick = {
+                        overlayRemover = !overlayRemover
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_BROWSER_OVERLAY_REMOVER, overlayRemover).apply()
+                        webView?.reload()
+                    }
+                )
+            }
+        }
+
+        // Phishing risk banner (on-device rule engine + optional TFLite) + UPI Payee Verification
+        phishingRisk?.let { risk ->
+            if (risk.phishingProbability > 0.55f) {
+                GlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 2.dp),
+                    cornerRadius = 10.dp
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = ClearColors.danger, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "${risk.label} • ${(risk.phishingProbability * 100).toInt()}%  ${if (risk.usedML) "(TFLite+rules)" else "(rules)"}",
+                            fontSize = 11.sp,
+                            color = ClearColors.danger,
+                            fontWeight = FontWeight.Medium
+                        )
+                        val regional = com.clearguard.app.security.OnDeviceRuleEngine.getRegionalExplanation(
+                            com.clearguard.app.security.OnDeviceRuleEngine.ClassificationResult(
+                                (risk.phishingProbability * 100).toInt(),
+                                risk.label,
+                                risk.reasons,
+                                risk.phishingProbability > 0.5f
+                            )
+                        )
+                        Text(regional, fontSize = 9.sp, color = ClearColors.muted)
+                    }
+                }
+            }
+        }
+
+        // UPI Payee Verification & Delay hint (from current URL or page)
+        currentUrl?.let { url ->
+            if (url.startsWith("upi://", ignoreCase = true)) {
+                val upi = com.clearguard.app.security.OnDeviceRuleEngine.parseUpiLink(url)
+                if (upi != null) {
+                    val verification = com.clearguard.app.security.OnDeviceRuleEngine.BankingGateway.verifyPayee(
+                        upi.vpa, upi.amount, "in-app browser transaction"
+                    )
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+                        cornerRadius = 10.dp
+                    ) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text("UPI Payee Verification (Banking Gateway)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (verification.riskScore > 50) ClearColors.danger else ClearColors.green)
+                            Text("VPA: ${verification.vpa} | Verified Name: ${verification.verifiedName ?: "Unknown"}", fontSize = 11.sp)
+                            if (upi.amount != null) Text("Amount: ₹${upi.amount}", fontSize = 11.sp)
+                            Text("Risk: ${verification.riskScore}/100 | Action: ${verification.recommendedAction}", fontSize = 10.sp, color = ClearColors.muted)
+                            Text(verification.explanation, fontSize = 10.sp, color = ClearColors.muted)
+                        }
+                    }
                 }
             }
         }
@@ -223,6 +420,66 @@ fun BrowserScreen() {
                                 // Inject Cricket streaming popup blocker
                                 injectCricketPopupBlockerScript(view)
 
+                                // Dark Pattern Blocker (new)
+                                if (darkPatternBlocker) {
+                                    injectDarkPatternBlocker(view)
+                                }
+
+                                // Fake Customer Care Number Warner (very useful for India)
+                                if (phoneCareWarner) {
+                                    injectFakeCustomerCareWarner(view)
+                                }
+
+                                // Anti-adblock bypass tools (advanced)
+                                if (scriptletInjection) {
+                                    injectScriptletInjection(view)
+                                }
+                                if (antiAdblockDefuser) {
+                                    injectAntiAdblockDefuser(view)
+                                }
+                                if (popupTrapBlocker) {
+                                    injectPopupTrapBlocker(view)
+                                }
+                                if (redirectChainCleaner) {
+                                    injectRedirectChainCleaner(view)
+                                }
+                                if (antiPaywallWarning) {
+                                    injectAntiPaywallWarning(view)
+                                }
+                                if (sponsoredWidgetRemover) {
+                                    injectSponsoredWidgetRemover(view)
+                                }
+                                if (fakeCountdownRemover) {
+                                    injectFakeCountdownRemover(view)
+                                }
+                                if (overlayRemover) {
+                                    injectOverlayRemover(view)
+                                }
+
+                                // On-device rule engine + TFLite phishing classification (runs fast regex/heuristics + optional model)
+                                val prefs = PreferenceKeys.prefs(context)
+                                val ruleEngineOn = prefs.getBoolean(
+                                    PreferenceKeys.KEY_ON_DEVICE_RULE_ENGINE_ENABLED,
+                                    PreferenceKeys.DEFAULT_ON_DEVICE_RULE_ENGINE_ENABLED
+                                )
+                                val tfliteOn = ruleEngineOn && prefs.getBoolean(
+                                    PreferenceKeys.KEY_PHISHING_TFLITE_ENABLED,
+                                    PreferenceKeys.DEFAULT_PHISHING_TFLITE_ENABLED
+                                )
+                                if (ruleEngineOn) {
+                                    try {
+                                        val pageText = view?.title ?: ""
+                                        val res = com.clearguard.app.security.PhishingClassifier.classify(
+                                            context, pageText, url, tfliteOn
+                                        )
+                                        phishingRisk = res
+                                        if (res.phishingProbability > 0.65f) {
+                                            // Show non-intrusive warning (reuse existing alert pattern)
+                                            // In a real polish we could trigger a dedicated phishingRiskAlert state
+                                        }
+                                    } catch (_: Exception) {}
+                                }
+
                                 // If element cleaner mode is active, trigger activator script
                                 if (elementCleanerMode) {
                                     injectWebsiteCleanerActivator(view)
@@ -293,6 +550,28 @@ fun BrowserScreen() {
                     webView?.loadUrl("https://google.com")
                 }) {
                     Icon(Icons.Default.Home, contentDescription = "Home", tint = ClearColors.green)
+                }
+
+                // === "Clean My Website" Button (prominent per user request #5) ===
+                IconButton(onClick = {
+                    webView?.let { wv ->
+                        injectComprehensivePageCleaner(wv)
+                        injectDarkPatternBlocker(wv)
+                        injectFakeCustomerCareWarner(wv)
+                        // Anti-adblock bypass tools (if user has them enabled, or force some)
+                        if (scriptletInjection || antiAdblockDefuser || popupTrapBlocker || redirectChainCleaner || antiPaywallWarning || sponsoredWidgetRemover || fakeCountdownRemover || overlayRemover) {
+                            injectScriptletInjection(wv)
+                            injectAntiAdblockDefuser(wv)
+                            injectPopupTrapBlocker(wv)
+                            injectRedirectChainCleaner(wv)
+                            injectAntiPaywallWarning(wv)
+                            injectSponsoredWidgetRemover(wv)
+                            injectFakeCountdownRemover(wv)
+                            injectOverlayRemover(wv)
+                        }
+                    }
+                }) {
+                    Icon(Icons.Default.CleaningServices, contentDescription = "Clean this page", tint = ClearColors.green)
                 }
             }
         }
@@ -552,4 +831,423 @@ private fun saveCleanerRule(context: Context, url: String, selector: String) {
             prefs.edit().putString(PreferenceKeys.KEY_BROWSER_CLEANER_RULES, obj.toString()).apply()
         }
     } catch (e: Exception) {}
+}
+
+// === New: Comprehensive "Clean My Website" + Dark Pattern Blocker ===
+private fun injectComprehensivePageCleaner(view: WebView?) {
+    val js = """
+        (function() {
+            try {
+                var style = document.createElement('style');
+                style.id = 'shield-full-clean';
+                style.innerHTML = `
+                    /* Ads & empty ad spaces (exact match to request) */
+                    [class*="ad"], [id*="ad"], .advertisement, .ad-container, .ad-slot, .google-ad,
+                    [class*="sponsored"], [class*="promo"], .native-ad, [class*="banner"],
+                    .ad-wrapper, [data-ad], [id*="ad-"] { display: none !important; height: 0 !important; }
+                    
+                    /* Floating video (exact) */
+                    video, [class*="video"], iframe[src*="youtube"], .floating-video, 
+                    .video-container, [class*="autoplay"] { display: none !important; }
+                    
+                    /* Sticky header (exact) */
+                    header[style*="position: fixed"], header[style*="position:fixed"], 
+                    .sticky, .fixed-header, [class*="sticky-header"], [class*="fixed-top"] { display: none !important; }
+                    
+                    /* Sidebar clutter (exact) */
+                    .sidebar, [class*="sidebar"], .right-col, .left-col, aside, 
+                    [class*="side-bar"], .widget-sidebar { display: none !important; }
+                    
+                    /* Newsletter popup (exact) */
+                    [class*="newsletter"], [id*="newsletter"], .newsletter-popup, 
+                    [class*="subscribe-popup"] { display: none !important; }
+                    
+                    /* Cookie banner (exact) */
+                    [class*="cookie"], [id*="cookie"], .consent-banner, .cookie-law, 
+                    #cookie-consent, [aria-label*="cookie"] { display: none !important; }
+                    
+                    /* Recommended articles (exact) */
+                    [class*="recommend"], [class*="related"], .trending, .you-may-like,
+                    .footer-recommend, .more-from, .recommended-articles, [class*="read-more"] { display: none !important; }
+                    
+                    /* Empty ad spaces & hidden close buttons */
+                    [style*="height:0"], [style*="min-height:0"], [class*="empty-ad"],
+                    button[style*="opacity:0"], .close[style*="display:none"], [aria-hidden="true"] { display: none !important; }
+                `;
+                document.head.appendChild(style);
+                
+                // Force remove persistent elements
+                var selectors = [
+                    '[class*="popup"]', '[id*="popup"]', '.modal', '[class*="newsletter"]', 
+                    '[class*="subscribe"]', '[class*="cookie"]', '.ad', '.sponsored',
+                    'aside', '.sidebar', 'video', 'iframe[src*="youtube"]'
+                ];
+                selectors.forEach(function(sel) {
+                    document.querySelectorAll(sel).forEach(function(el) { 
+                        el.style.display = 'none'; 
+                        el.setAttribute('data-shield-removed', 'clean-website');
+                    });
+                });
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null)
+}
+
+private fun injectDarkPatternBlocker(view: WebView?) {
+    val js = """
+        (function() {
+            try {
+                // 1. Uncheck auto-selected subscriptions / "accept all"
+                document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(function(cb) {
+                    var label = cb.closest('label') || cb.parentElement;
+                    var txt = (label ? label.innerText : cb.value || '').toLowerCase();
+                    if (txt.includes('subscribe') || txt.includes('newsletter') || txt.includes('marketing') || txt.includes('accept all') || txt.includes('opt in')) {
+                        if (cb.checked) cb.checked = false;
+                        // Also uncheck "I agree to terms" if bundled with subscription
+                        if (txt.includes('terms') || txt.includes('conditions')) cb.checked = false;
+                    }
+                });
+                
+                // 2. Confirm-shaming text & tricky buttons
+                document.querySelectorAll('button, a, [role="button"], div[onclick]').forEach(function(btn) {
+                    var txt = (btn.innerText || btn.textContent || '').toLowerCase().trim();
+                    if (txt.includes("no thanks") || txt.includes("no, i don't") || txt.includes("don't want") || txt.includes("maybe later") || txt.includes("i'll pass")) {
+                        btn.style.opacity = '0.5';
+                        btn.style.border = '1px dashed #22C55E';
+                        btn.title = 'This looks like confirm-shaming. Click if you really want to skip.';
+                    }
+                    if (txt.includes("accept all cookies") || txt.includes("agree and continue") || txt.includes("allow all")) {
+                        btn.style.border = '2px solid #22C55E';
+                        btn.title = 'Consider "Reject all" or customize instead';
+                    }
+                });
+                
+                // 3. Subscription cancellation obstacles - make cancel easy to find
+                document.querySelectorAll('a, button, [role="button"]').forEach(function(el) {
+                    var txt = (el.innerText || el.textContent || '').toLowerCase();
+                    if (txt.includes('cancel') || txt.includes('unsubscribe') || txt.includes('stop') || txt.includes('end subscription')) {
+                        el.style.outline = '3px solid #22C55E';
+                        el.style.outlineOffset = '3px';
+                        el.style.fontWeight = 'bold';
+                        if (el.style.display === 'none') el.style.display = '';
+                    }
+                });
+                
+                // 4. Hidden close buttons - make them obvious
+                document.querySelectorAll('[class*="close"], [id*="close"], .modal-close, button[aria-label*="close"], [title*="close"]').forEach(function(el) {
+                    el.style.minWidth = '28px';
+                    el.style.minHeight = '28px';
+                    el.style.opacity = '1';
+                    el.style.fontSize = '18px';
+                    el.style.zIndex = '999999';
+                });
+                
+                // 5. Forced newsletter / popup removal (aggressive)
+                setTimeout(function() {
+                    var popups = document.querySelectorAll('[class*="newsletter"], [id*="newsletter"], [class*="popup"], [class*="modal"], [class*="overlay"], [aria-modal="true"]');
+                    popups.forEach(function(el) {
+                        if (el.offsetHeight > 80 || el.offsetWidth > 200) {
+                            el.style.display = 'none';
+                            el.setAttribute('data-shield-hidden', 'dark-pattern');
+                        }
+                    });
+                }, 600);
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null);
+}
+
+// === Mobile Number Risk Scoring + Fake Customer Care Number Blocker (FRI integration, first feature) ===
+// Covers high-risk senders for: Banks, UPI apps, Airlines, Courier services, E-commerce support, Gas/electricity bill help
+// Uses on-device risk scoring (see OnDeviceRuleEngine.phoneRiskScore). High risk -> prominent warning.
+// "Block or warn on high risk" via user action (add to security blocks) or scanner/browser banner.
+// For true incoming SMS/calls: use scanner on message screenshot (or future BroadcastReceiver for full interception).
+private fun injectFakeCustomerCareWarner(view: WebView?) {
+    val js = """
+        (function() {
+            try {
+                var suspiciousKeywords = [
+                    'customer care', 'helpline', 'toll free', 'support', 'call us', 'contact us', 
+                    'customer support', 'refund', 'kyc', 
+                    'bank', 'sbi', 'hdfc', 'icici', 'axis', 'paytm', 'phonepe', 'gpay', 'bhim',
+                    'delhivery', 'ekart', 'dtdc', 'fedex', 'ups',
+                    'air india', 'indigo', 'spicejet', 'goair', 'vistara',
+                    'electricity', 'mseb', 'bescom', 'tneb', 'gas', 'lpg', 'indane', 'hp gas',
+                    'ecommerce', 'amazon', 'flipkart', 'myntra', 'support number'
+                ];
+                var phoneRegex = /(?:\+?91[\s-]?)?[6-9]\d{9}/g;
+                
+                function showWarning(num, context, risk) {
+                    var banner = document.createElement('div');
+                    banner.style.cssText = 'position:fixed;bottom:80px;left:8px;right:8px;background:#fef2f2;border:1px solid #ef4444;color:#7f1d1d;padding:12px;border-radius:12px;z-index:999999;font-size:13px;box-shadow:0 6px 16px rgba(0,0,0,0.2);font-family:sans-serif';
+                    var riskText = risk ? ' (Risk: ' + risk + '/100 - High risk sender per local FRI heuristic)' : '';
+                    banner.innerHTML = 
+                        '<div style="display:flex;align-items:flex-start">' +
+                        '<span style="font-size:16px;margin-right:8px">⚠️</span>' +
+                        '<div style="flex:1">' +
+                        '<strong style="display:block;margin-bottom:2px">This number may not be official.' + riskText + '</strong>' +
+                        '<span style="font-size:12px">Verify on the official app or website before calling.</span>' +
+                        '<div style="margin-top:4px;font-size:11px;opacity:0.85">' + num + ' — ' + context.substring(0, 70) + (context.length > 70 ? '...' : '') + '</div>' +
+                        '</div>' +
+                        '<span style="margin-left:8px;cursor:pointer;font-weight:bold" onclick="this.parentElement.remove()">✕</span>' +
+                        '</div>';
+                    
+                    document.body.appendChild(banner);
+                    setTimeout(function() { if (banner && banner.parentNode) banner.parentNode.removeChild(banner); }, 20000);
+                }
+                
+                // Scan visible text
+                var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                var node;
+                while ((node = walker.nextNode())) {
+                    var txt = node.textContent || '';
+                    var matches = txt.match(phoneRegex);
+                    if (matches && matches.length > 0) {
+                        var parentEl = node.parentElement;
+                        var parentTxt = (parentEl ? parentEl.innerText || parentEl.textContent || '' : txt).toLowerCase();
+                        var isSuspicious = suspiciousKeywords.some(function(kw) { return parentTxt.includes(kw); });
+                        if (isSuspicious) {
+                            matches.forEach(function(num) {
+                                showWarning(num, parentTxt, null); // risk computed on-device in Kotlin side for scanner
+                            });
+                        }
+                    }
+                }
+                
+                // Scan tel: links and click-to-call
+                document.querySelectorAll('a[href^="tel:"], a[href^="callto:"], [onclick*="tel"], [onclick*="call"]').forEach(function(link) {
+                    var href = link.getAttribute('href') || '';
+                    var num = href.replace(/tel:|callto:|\D/g, '').trim();
+                    if (!num) num = (link.innerText || link.textContent || '').replace(/\D/g, '');
+                    if (num.length >= 10) {
+                        var context = (link.innerText || '') + ' ' + (link.closest('div,section,p,li') ? link.closest('div,section,p,li').innerText || '' : '');
+                        if (suspiciousKeywords.some(function(kw){ return context.toLowerCase().includes(kw); })) {
+                            showWarning(num, context, null);
+                        }
+                    }
+                });
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null);
+}
+
+// === Anti-adblock bypass tools (advanced features for sites that detect adblockers) ===
+
+private fun injectScriptletInjection(view: WebView?) {
+    // Basic uBO-style scriptlets to neuter common adblock detections
+    val js = """
+        (function() {
+            try {
+                // Scriptlet: abort-on-property-read (common anti-adblock)
+                var abort = function(prop) {
+                    var parts = prop.split('.');
+                    var obj = window;
+                    for (var i = 0; i < parts.length - 1; i++) {
+                        if (!obj[parts[i]]) obj[parts[i]] = {};
+                        obj = obj[parts[i]];
+                    }
+                    var last = parts[parts.length-1];
+                    Object.defineProperty(obj, last, { get: function() { throw new Error(''); } });
+                };
+                // Common detections
+                abort('adblock');
+                abort('isAdblock');
+                abort('adBlockDetected');
+                abort('adblockerDetected');
+                // Prevent some bait scripts
+                document.querySelectorAll('script[src*="ad"], script[src*="block"]').forEach(function(s){ s.remove(); });
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null);
+}
+
+private fun injectAntiAdblockDefuser(view: WebView?) {
+    val js = """
+        (function() {
+            try {
+                // Defuse common anti-adblock patterns
+                if (window.adblock) window.adblock = false;
+                if (window.adblocker) window.adblocker = false;
+                if (typeof window.canRunAds !== 'undefined') window.canRunAds = true;
+                
+                // Override common anti-adblock functions
+                var noop = function(){};
+                if (window.detectAdblock) window.detectAdblock = noop;
+                if (window.checkAdblock) window.checkAdblock = noop;
+                if (window.showAdblockWarning) window.showAdblockWarning = noop;
+                
+                // Remove elements that are anti-adblock messages
+                setTimeout(function() {
+                    document.querySelectorAll('[class*="adblock"], [id*="adblock"], [class*="ad-block"], .adblocker, .ad-blocker, [data-adblock]').forEach(function(el){
+                        if (el.innerText && el.innerText.length < 300) el.remove();
+                    });
+                }, 1200);
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null);
+}
+
+private fun injectPopupTrapBlocker(view: WebView?) {
+    val js = """
+        (function() {
+            try {
+                // Prevent popup traps and forced window.open
+                var originalOpen = window.open;
+                window.open = function(url, name, specs) {
+                    if (url && (url.includes('ad') || url.includes('pop') || url.includes('track') || specs)) {
+                        console.log('[Shield] Blocked potential popup trap');
+                        return null;
+                    }
+                    return originalOpen.apply(this, arguments);
+                };
+                
+                // Block addEventListener for certain popup events
+                var origAdd = EventTarget.prototype.addEventListener;
+                EventTarget.prototype.addEventListener = function(type, listener, options) {
+                    if (type === 'click' || type === 'touchstart') {
+                        var orig = listener;
+                        listener = function(e) {
+                            if (e && e.isTrusted === false) return; // synthetic
+                            return orig.apply(this, arguments);
+                        };
+                    }
+                    return origAdd.apply(this, arguments);
+                };
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null);
+}
+
+private fun injectRedirectChainCleaner(view: WebView?) {
+    val js = """
+        (function() {
+            try {
+                // Detect and warn on suspicious redirect chains (common for ad walls)
+                var redirectCount = 0;
+                var lastLocation = location.href;
+                var observer = new MutationObserver(function() {
+                    if (location.href !== lastLocation) {
+                        redirectCount++;
+                        lastLocation = location.href;
+                        if (redirectCount > 3) {
+                            var banner = document.createElement('div');
+                            banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#fef3c7;color:#92400e;padding:8px;font-size:12px;z-index:999999;text-align:center';
+                            banner.textContent = '[Shield] Multiple redirects detected. This site may be using redirect chains to serve ads.';
+                            document.body.appendChild(banner);
+                            setTimeout(function(){ banner.remove(); }, 8000);
+                            redirectCount = 0;
+                        }
+                    }
+                });
+                observer.observe(document, { childList: true, subtree: true });
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null);
+}
+
+private fun injectAntiPaywallWarning(view: WebView?) {
+    // Warning only, no bypass (ethical)
+    val js = """
+        (function() {
+            try {
+                var paywallSelectors = ['.paywall', '#paywall', '.subscription-wall', '[class*="paywall"]', '[id*="paywall"]', '.metered-paywall', '.premium-content'];
+                setTimeout(function() {
+                    paywallSelectors.forEach(function(sel) {
+                        document.querySelectorAll(sel).forEach(function(el) {
+                            if (el.offsetHeight > 50) {
+                                el.style.filter = 'blur(2px)';
+                                var warn = document.createElement('div');
+                                warn.style.cssText = 'background:#dbeafe;color:#1e40af;padding:8px;margin:8px;border-radius:6px;font-size:12px';
+                                warn.textContent = '[Shield] Paywall detected. This tool shows a warning only and does not bypass paywalls.';
+                                el.parentNode.insertBefore(warn, el);
+                            }
+                        });
+                    });
+                }, 1500);
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null);
+}
+
+private fun injectSponsoredWidgetRemover(view: WebView?) {
+    val js = """
+        (function() {
+            try {
+                var sponsoredSelectors = [
+                    '[class*="sponsored"]', '[id*="sponsored"]', '[data-sponsored]', 
+                    '.sponsored-content', '.promoted', '[class*="recommendation"]', 
+                    '.widget-sponsored', '[aria-label*="sponsored"]', '.ad-recommend'
+                ];
+                sponsoredSelectors.forEach(function(sel) {
+                    document.querySelectorAll(sel).forEach(function(el) {
+                        el.style.display = 'none';
+                        el.setAttribute('data-shield-removed', 'sponsored');
+                    });
+                });
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null);
+}
+
+private fun injectFakeCountdownRemover(view: WebView?) {
+    val js = """
+        (function() {
+            try {
+                // Remove fake countdowns / timers that force waiting
+                var countdownSelectors = [
+                    '[class*="countdown"]', '[id*="countdown"]', '[class*="timer"]', 
+                    '[class*="wait"]', '.fake-timer', '[data-countdown]'
+                ];
+                countdownSelectors.forEach(function(sel) {
+                    document.querySelectorAll(sel).forEach(function(el) {
+                        if (el.innerText && /\d+[:\s]\d+/.test(el.innerText)) {
+                            el.remove();
+                        }
+                    });
+                });
+                // Also kill setInterval/setTimeout that look like ad countdowns (heuristic)
+                var origSetInterval = window.setInterval;
+                window.setInterval = function(fn, delay) {
+                    if (delay < 1000 && String(fn).includes('count') || String(fn).includes('timer')) {
+                        return -1; // block suspicious short timers
+                    }
+                    return origSetInterval.apply(this, arguments);
+                };
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null);
+}
+
+private fun injectOverlayRemover(view: WebView?) {
+    val js = """
+        (function() {
+            try {
+                // Remove full-page blocking overlays / modals used for anti-adblock
+                setTimeout(function() {
+                    document.querySelectorAll('div, section, aside').forEach(function(el) {
+                        var style = window.getComputedStyle(el);
+                        var z = parseInt(style.zIndex) || 0;
+                        if (z > 1000 && (style.position === 'fixed' || style.position === 'absolute') && 
+                            el.offsetWidth > window.innerWidth * 0.7 && el.offsetHeight > window.innerHeight * 0.6) {
+                            if (!el.querySelector('input, textarea, form')) { // don't kill real modals
+                                el.style.display = 'none';
+                                el.setAttribute('data-shield-removed', 'overlay');
+                            }
+                        }
+                    });
+                }, 800);
+            } catch(e) {}
+        })();
+    """.trimIndent()
+    view?.evaluateJavascript(js, null);
 }

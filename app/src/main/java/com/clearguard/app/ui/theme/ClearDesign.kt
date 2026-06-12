@@ -50,6 +50,12 @@ object ClearDesign {
     const val buttonPressedScale = 0.955f
     /** Selected bottom-nav icon scale. */
     const val navSelectedScale = 1.08f
+    /** Tab-to-tab crossfade for sub-tab pagers. */
+    const val tabCrossfadeMs = 200
+    /** Stagger delay between list item entrance animations. */
+    const val listItemStaggerMs = 40
+    /** Bouncy scale used for interactive pill / chip selection. */
+    const val pillSelectedScale = 1.04f
 
     // --- Spacing scale ---
     /** Horizontal screen margin. */

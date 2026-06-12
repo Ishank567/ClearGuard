@@ -1,11 +1,12 @@
 <resources>
     <!-- Mirrors ClearPalettes.dark in ui/theme/Color.kt so the launch window
          matches the in-app dark theme. -->
-    <color name="clear_bg">#000000</color>
-    <color name="clear_panel">#0C0707</color>
-    <color name="clear_text">#FFFFFF</color>
-    <color name="clear_muted">#8C8282</color>
-    <color name="clear_green">#FF3333</color>
-    <color name="clear_blue">#FF5555</color>
-    <color name="clear_border">#281010</color>
+    <color name="clear_bg">#0C0F14</color>
+    <color name="clear_panel">#141820</color>
+    <color name="clear_text">#E8ECF4</color>
+    <color name="clear_muted">#6B7A8D</color>
+    <color name="clear_green">#2DD4BF</color>
+    <color name="clear_blue">#38BDF8</color>
+    <color name="clear_border">#1E2736</color>
 </resources>
+

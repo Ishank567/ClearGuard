@@ -471,21 +471,34 @@ public final class ClearGuardVpnService extends VpnService {
             }
         }
 
-        // 2. One-tap modes / Security Profiles
-        String securityMode = prefs.getString(PreferenceKeys.KEY_SECURITY_MODE, PreferenceKeys.DEFAULT_SECURITY_MODE);
+        // 2. Intent-Based Protection Modes (full vision support)
+        String protectionMode = prefs.getString(PreferenceKeys.KEY_PROTECTION_MODE, PreferenceKeys.DEFAULT_PROTECTION_MODE);
+        String legacySecurity = prefs.getString(PreferenceKeys.KEY_SECURITY_MODE, PreferenceKeys.DEFAULT_SECURITY_MODE);
+        String effectiveMode = (!"default".equals(protectionMode)) ? protectionMode : legacySecurity;
+
         if (dnsResponse == null) {
-            if ("strict".equals(securityMode) && isStrictBlock(question.name)) {
+            if (("strict".equals(effectiveMode) || "study".equals(effectiveMode) || "work".equals(effectiveMode)) && isStrictBlock(question.name)) {
                 dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
-                recordFirewallBlocked(question.name, "Strict Security Policy", appInfo.name, appInfo.packageName);
-            } else if ("family".equals(securityMode) && isFamilyBlock(question.name)) {
+                recordFirewallBlocked(question.name, effectiveMode + " strict policy", appInfo.name, appInfo.packageName);
+            } else if (("family".equals(effectiveMode) || "kids".equals(effectiveMode) || "elder".equals(effectiveMode)) && isFamilyBlock(question.name)) {
                 dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
-                recordFirewallBlocked(question.name, "Family Mode Protection", appInfo.name, appInfo.packageName);
+                recordFirewallBlocked(question.name, effectiveMode + " protection", appInfo.name, appInfo.packageName);
+            } else if ("spiritual".equals(effectiveMode) && (question.name.contains("bet") || question.name.contains("casino") || question.name.contains("rummy") || question.name.contains("dream11") || question.name.contains("gamble") || question.name.contains("adult") || question.name.contains("sex") || question.name.contains("dating"))) {
+                dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                recordFirewallBlocked(question.name, "Spiritual / Satvik Clean", appInfo.name, appInfo.packageName);
+            } else if ("shopping".equals(effectiveMode) && (question.name.contains("offer") || question.name.contains("deal") || question.name.contains("coupon") || question.name.contains("discount") || question.name.contains("sale"))) {
+                // Light extra for shopping mode on obvious ad/tracker patterns
+                if (question.name.contains("ad") || question.name.contains("track") || question.name.contains("analytics")) {
+                    dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                    recordFirewallBlocked(question.name, "Shopping Mode - Fake offer / tracker", appInfo.name, appInfo.packageName);
+                }
             }
         }
 
         // 3. DNS resolve & standard blocker
         if (dnsResponse == null) {
-            ScamDetector.Result scamThreat = scamThreat(question.name);
+            String currentMode = prefs.getString(PreferenceKeys.KEY_PROTECTION_MODE, PreferenceKeys.DEFAULT_PROTECTION_MODE);
+            ScamDetector.Result scamThreat = scamThreat(question.name, currentMode);
             if (blocker.shouldBlock(question.name)) {
                 dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
                 if (blocker.isSecurityBlock(question.name)) {
@@ -509,10 +522,10 @@ public final class ClearGuardVpnService extends VpnService {
                         boolean useDoh = dohEnabled;
                         String activeDohUrl = dohUrl;
 
-                        if ("gaming".equals(securityMode)) {
+                        if ("gaming".equals(effectiveMode)) {
                             useDoh = true;
                             activeDohUrl = "https://cloudflare-dns.com/dns-query";
-                        } else if ("battery".equals(securityMode)) {
+                        } else if ("battery".equals(effectiveMode) || "battery".equals(protectionMode)) {
                             useDoh = false;
                         }
 
@@ -532,9 +545,9 @@ public final class ClearGuardVpnService extends VpnService {
                         }
 
                         int ttlSeconds = prefs.getInt(PreferenceKeys.KEY_CACHE_TTL_SECONDS, PreferenceKeys.DEFAULT_CACHE_TTL_SECONDS);
-                        if ("gaming".equals(securityMode)) {
+                        if ("gaming".equals(effectiveMode)) {
                             ttlSeconds = Math.max(ttlSeconds, 1800);
-                        } else if ("battery".equals(securityMode)) {
+                        } else if ("battery".equals(effectiveMode) || "battery".equals(protectionMode)) {
                             ttlSeconds = Math.max(ttlSeconds, 3600);
                         }
 
@@ -662,7 +675,7 @@ public final class ClearGuardVpnService extends VpnService {
         blockedDomainCounts.merge(domain.toLowerCase(java.util.Locale.US), 1L, Long::sum);
     }
 
-    private ScamDetector.Result scamThreat(String domain) {
+    private ScamDetector.Result scamThreat(String domain, String protectionMode) {
         if (!prefs.getBoolean(
                 PreferenceKeys.KEY_SCAM_SHIELD_ENABLED,
                 PreferenceKeys.DEFAULT_SCAM_SHIELD_ENABLED)) {
@@ -671,8 +684,27 @@ public final class ClearGuardVpnService extends VpnService {
         if (blocker.isAllowed(domain)) {
             return null;
         }
-        boolean religiousClean = prefs.getBoolean("religious_clean_enabled", false);
-        return ScamDetector.analyze(domain, religiousClean);
+        String mode = (protectionMode != null && !protectionMode.isEmpty())
+                ? protectionMode
+                : prefs.getString(PreferenceKeys.KEY_PROTECTION_MODE, PreferenceKeys.DEFAULT_PROTECTION_MODE);
+        boolean religiousClean = "spiritual".equalsIgnoreCase(mode) || prefs.getBoolean("religious_clean_enabled", false);
+        boolean indianScam = prefs.getBoolean(
+                PreferenceKeys.KEY_INDIAN_SCAM_SHIELD_ENABLED,
+                PreferenceKeys.DEFAULT_INDIAN_SCAM_SHIELD_ENABLED
+        );
+        boolean ruleEngine = prefs.getBoolean(
+                PreferenceKeys.KEY_ON_DEVICE_RULE_ENGINE_ENABLED,
+                PreferenceKeys.DEFAULT_ON_DEVICE_RULE_ENGINE_ENABLED
+        );
+        boolean useTFLite = ruleEngine && prefs.getBoolean(
+                PreferenceKeys.KEY_PHISHING_TFLITE_ENABLED,
+                PreferenceKeys.DEFAULT_PHISHING_TFLITE_ENABLED
+        );
+
+        // Pass context for TFLite (if enabled). The rule engine (regex+heuristics) is always used when flag is on.
+        android.content.Context ctx = useTFLite ? this : null;
+        ScamDetector.Result res = ScamDetector.analyze(domain, religiousClean, mode, indianScam, ctx, useTFLite);
+        return res;
     }
 
     private void recordScamBlocked(String domain, ScamDetector.Result threat, String appName, String appPackage) {
@@ -681,7 +713,27 @@ public final class ClearGuardVpnService extends VpnService {
             pendingScamBlocked++;
         }
         countBlockedDomain(domain);
-        addRecentQuery(domain, "Scam shield: " + threat.reason, threat.score, true, "threat", -1, appName, appPackage);
+        String displayReason = threat.reason;
+        // Dedicated Indian Scam Shield prefix for the 9 categories (reason-based, no extra state needed)
+        String r = threat.reason.toLowerCase(java.util.Locale.US);
+        if (r.contains("upi kyc") || r.contains("electricity bill") || r.contains("courier delivery") ||
+            r.contains("loan approval") || r.contains("job registration") || r.contains("government scheme") ||
+            r.contains("investment group") || r.contains("apk download") || r.contains("customer care")) {
+            displayReason = "Indian Scam Shield: " + threat.reason;
+        }
+
+        // Wire Mobile Number Risk Scoring (FRI) into VPN activity / recent queries
+        // If the blocked domain/reason looks high-risk per local FRI DB (e.g. bank/UPI support domains),
+        // append risk score to the activity log for "high-risk sender" vetting.
+        try {
+            com.clearguard.app.security.OnDeviceRuleEngine.ClassificationResult riskRes =
+                com.clearguard.app.security.OnDeviceRuleEngine.classify(domain + " " + threat.reason, domain);
+            if (riskRes.isPhishing() || riskRes.getScore() >= 60) {
+                displayReason = displayReason + " [FRI Risk:" + riskRes.getScore() + " - high-risk sender per local DB]";
+            }
+        } catch (Exception ignored) {}
+
+        addRecentQuery(domain, "Scam shield: " + displayReason, threat.score, true, "threat", -1, appName, appPackage);
         trackPrivacyStats(appPackage, appName, domain, true);
         flushStats(false);
     }
@@ -699,6 +751,36 @@ public final class ClearGuardVpnService extends VpnService {
     private void recordAllowedQuery(String domain, String reason, int latencyMs, String appName, String appPackage) {
         addRecentQuery(domain, reason, 0, false, "allowed", latencyMs, appName, appPackage);
         trackPrivacyStats(appPackage, appName, domain, false);
+    }
+
+    // Public method for realtime risk events (e.g., from SMS/Call receivers) to log into the app's activity/stats
+    public static void logHighRiskPhoneEvent(String phone, int riskScore, String context, String appName, String appPackage) {
+        // Use a pseudo-domain for the phone risk event in recent queries
+        String pseudoDomain = "phone:" + phone;
+        String reason = "High-risk phone (FRI:" + riskScore + ") - " + context;
+        addRecentQueryStatic(pseudoDomain, reason, 0, true, "threat", -1, appName != null ? appName : "Phone", appPackage != null ? appPackage : "phone.risk");
+        // Also track as scam-like
+        // Note: stats would need extension, but for activity it's wired
+    }
+
+    // Helper to allow static access for receivers (since addRecentQuery is instance)
+    private static void addRecentQueryStatic(String domain, String reason, int threatScore, boolean blocked, String status, int latencyMs, String appName, String appPackage) {
+        synchronized (RECENT_QUERIES) {
+            RECENT_QUERIES.addFirst(new BlockedQuery(
+                    domain,
+                    System.currentTimeMillis(),
+                    reason,
+                    threatScore,
+                    blocked,
+                    status,
+                    latencyMs,
+                    appName,
+                    appPackage));
+            while (RECENT_QUERIES.size() > RECENT_QUERIES_MAX) {
+                RECENT_QUERIES.removeLast();
+            }
+        }
+        // Could flush stats, but for now activity log is updated
     }
 
     private void recordCacheHit() {
@@ -1210,6 +1292,24 @@ public final class ClearGuardVpnService extends VpnService {
         if (lower.contains("mixpanel")) {
             return "Mixpanel";
         }
+        if (lower.contains("clevertap") || lower.contains("moengage") || lower.contains("webengage")) {
+            return "Indian Martech";
+        }
+        if (lower.contains("inmobi") || lower.contains("mopub") || lower.contains("applovin")) {
+            return "Ad Network";
+        }
+        if (lower.contains("branch.io") || lower.contains("adjust.") || lower.contains("appsflyer")) {
+            return "Attribution";
+        }
+        // Indian e-com / regional trackers from vision
+        if (lower.contains("meesho") || lower.contains("flipkart") || lower.contains("myntra")) {
+            return "Indian E-com";
+        }
+        if (lower.contains("razorpay") || lower.contains("payu") || lower.contains("cashfree")) {
+            return "Payments";
+        }
+        return "Other Ad / Analytics";
+    }
         if (lower.contains("flurry") || lower.contains("yahoo")) {
             return "Yahoo";
         }

@@ -98,8 +98,8 @@ fun LiquidGlassButton(
                 } else {
                     Brush.verticalGradient(
                         0f to accent.copy(alpha = 0.20f),
-                        0.50f to Color(0xFF0F0707),
-                        1f to Color(0xFF050202)
+                        0.50f to ClearColors.panel,
+                        1f to ClearColors.bg
                     )
                 },
                 shape = shape

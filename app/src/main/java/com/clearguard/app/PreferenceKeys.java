@@ -13,6 +13,8 @@ import java.util.Set;
 public final class PreferenceKeys {
     public static final String PREFS = "clear_guard";
 
+    public static final String KEY_ONBOARDING_SEEN = "onboarding_seen";
+
     public static final String KEY_ALLOWED_COUNT = "allowed_count";
     public static final String KEY_BLOCKED_COUNT = "blocked_count";
     public static final String KEY_BLOCKED_TODAY = "blocked_today";
@@ -67,6 +69,48 @@ public final class PreferenceKeys {
     public static final String KEY_BROWSER_COOKIE_REMOVER = "browser_cookie_remover";
     public static final String KEY_BROWSER_ANTI_FINGERPRINT = "browser_anti_fingerprint";
     public static final String KEY_BROWSER_CLEANER_RULES = "browser_cleaner_rules";
+    public static final String KEY_BROWSER_DARK_PATTERN_BLOCKER = "browser_dark_pattern_blocker";
+    public static final String KEY_BROWSER_FAKE_PHONE_WARNER = "browser_fake_phone_warner";
+
+    // Anti-adblock bypass tools (advanced, for users who encounter detection)
+    public static final String KEY_BROWSER_SCRIPTLET_INJECTION = "browser_scriptlet_injection";
+    public static final String KEY_BROWSER_ANTI_ADBLOCK_DEFUSER = "browser_anti_adblock_defuser";
+    public static final String KEY_BROWSER_POPUP_TRAP_BLOCKER = "browser_popup_trap_blocker";
+    public static final String KEY_BROWSER_REDIRECT_CHAIN_CLEANER = "browser_redirect_chain_cleaner";
+    public static final String KEY_BROWSER_ANTI_PAYWALL_WARNING = "browser_anti_paywall_warning";
+    public static final String KEY_BROWSER_SPONSORED_WIDGET_REMOVER = "browser_sponsored_widget_remover";
+    public static final String KEY_BROWSER_FAKE_COUNTDOWN_REMOVER = "browser_fake_countdown_remover";
+    public static final String KEY_BROWSER_OVERLAY_REMOVER = "browser_overlay_remover";
+
+    /** Intent-based protection mode (Study / Work / Kids / Elder / Shopping / Spiritual / BatterySaver / Default). */
+    public static final String KEY_PROTECTION_MODE = "protection_mode";
+    public static final String DEFAULT_PROTECTION_MODE = "default";
+
+    /** Dedicated Indian Scam Shield - targeted protection for the 9 common India-specific scams. */
+    public static final String KEY_INDIAN_SCAM_SHIELD_ENABLED = "indian_scam_shield_enabled";
+    public static final boolean DEFAULT_INDIAN_SCAM_SHIELD_ENABLED = true;
+
+    /** On-device rule engine + TFLite phishing classifier (advanced, opt-in for maximum local analysis). */
+    public static final String KEY_ON_DEVICE_RULE_ENGINE_ENABLED = "on_device_rule_engine_enabled";
+    public static final String KEY_PHISHING_TFLITE_ENABLED = "phishing_tflite_enabled";
+    public static final boolean DEFAULT_ON_DEVICE_RULE_ENGINE_ENABLED = true;
+    public static final boolean DEFAULT_PHISHING_TFLITE_ENABLED = false;  // off by default until model is provided in assets
+
+    // New advanced features from roadmap
+    public static final String KEY_MOBILE_RISK_SCORING_ENABLED = "mobile_risk_scoring_enabled";
+    public static final String KEY_UPI_PAYEE_VERIFICATION_ENABLED = "upi_payee_verification_enabled";
+    public static final String KEY_RASP_ENABLED = "rasp_enabled";
+    public static final boolean DEFAULT_MOBILE_RISK_SCORING_ENABLED = true;
+    public static final boolean DEFAULT_UPI_PAYEE_VERIFICATION_ENABLED = true;
+    public static final boolean DEFAULT_RASP_ENABLED = false; // high complexity, opt-in
+
+    /** Enable remote FRI/operator signals for the Mobile Risk Scoring API (enterprise). */
+    public static final String KEY_MOBILE_RISK_REMOTE_SIGNALS = "mobile_risk_remote_signals";
+    public static final boolean DEFAULT_MOBILE_RISK_REMOTE_SIGNALS = false;
+
+    /** Configurable endpoint for remote FRI/operator signals (default is stub). */
+    public static final String KEY_FRI_REMOTE_ENDPOINT = "fri_remote_endpoint";
+    public static final String DEFAULT_FRI_REMOTE_ENDPOINT = "https://api.example-fri.gov.in/v1/risk";
 
     public static final int DEFAULT_CACHE_TTL_SECONDS = 300;
     public static final boolean DEFAULT_SCAM_SHIELD_ENABLED = true;
@@ -88,6 +132,18 @@ public final class PreferenceKeys {
     public static final boolean DEFAULT_REGIONAL_PACK_INDIA = false;
     public static final boolean DEFAULT_BROWSER_COOKIE_REMOVER = true;
     public static final boolean DEFAULT_BROWSER_ANTI_FINGERPRINT = true;
+    public static final boolean DEFAULT_BROWSER_DARK_PATTERN_BLOCKER = true;
+    public static final boolean DEFAULT_BROWSER_FAKE_PHONE_WARNER = true;
+
+    // Advanced anti-adblock tools default to off (user must opt-in)
+    public static final boolean DEFAULT_BROWSER_SCRIPTLET_INJECTION = false;
+    public static final boolean DEFAULT_BROWSER_ANTI_ADBLOCK_DEFUSER = false;
+    public static final boolean DEFAULT_BROWSER_POPUP_TRAP_BLOCKER = false;
+    public static final boolean DEFAULT_BROWSER_REDIRECT_CHAIN_CLEANER = false;
+    public static final boolean DEFAULT_BROWSER_ANTI_PAYWALL_WARNING = false;
+    public static final boolean DEFAULT_BROWSER_SPONSORED_WIDGET_REMOVER = false;
+    public static final boolean DEFAULT_BROWSER_FAKE_COUNTDOWN_REMOVER = false;
+    public static final boolean DEFAULT_BROWSER_OVERLAY_REMOVER = false;
 
     private PreferenceKeys() {
     }
@@ -130,6 +186,38 @@ public final class PreferenceKeys {
         }
         if (!prefs.contains(KEY_SCAM_SHIELD_ENABLED)) {
             editor.putBoolean(KEY_SCAM_SHIELD_ENABLED, DEFAULT_SCAM_SHIELD_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_INDIAN_SCAM_SHIELD_ENABLED)) {
+            editor.putBoolean(KEY_INDIAN_SCAM_SHIELD_ENABLED, DEFAULT_INDIAN_SCAM_SHIELD_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_ON_DEVICE_RULE_ENGINE_ENABLED)) {
+            editor.putBoolean(KEY_ON_DEVICE_RULE_ENGINE_ENABLED, DEFAULT_ON_DEVICE_RULE_ENGINE_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_PHISHING_TFLITE_ENABLED)) {
+            editor.putBoolean(KEY_PHISHING_TFLITE_ENABLED, DEFAULT_PHISHING_TFLITE_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_MOBILE_RISK_SCORING_ENABLED)) {
+            editor.putBoolean(KEY_MOBILE_RISK_SCORING_ENABLED, DEFAULT_MOBILE_RISK_SCORING_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_MOBILE_RISK_REMOTE_SIGNALS)) {
+            editor.putBoolean(KEY_MOBILE_RISK_REMOTE_SIGNALS, DEFAULT_MOBILE_RISK_REMOTE_SIGNALS);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_FRI_REMOTE_ENDPOINT)) {
+            editor.putString(KEY_FRI_REMOTE_ENDPOINT, DEFAULT_FRI_REMOTE_ENDPOINT);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_UPI_PAYEE_VERIFICATION_ENABLED)) {
+            editor.putBoolean(KEY_UPI_PAYEE_VERIFICATION_ENABLED, DEFAULT_UPI_PAYEE_VERIFICATION_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_RASP_ENABLED)) {
+            editor.putBoolean(KEY_RASP_ENABLED, DEFAULT_RASP_ENABLED);
             changed = true;
         }
         if (!prefs.contains(KEY_DOH_ENABLED)) {
@@ -182,6 +270,50 @@ public final class PreferenceKeys {
         }
         if (!prefs.contains(KEY_BROWSER_ANTI_FINGERPRINT)) {
             editor.putBoolean(KEY_BROWSER_ANTI_FINGERPRINT, DEFAULT_BROWSER_ANTI_FINGERPRINT);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_DARK_PATTERN_BLOCKER)) {
+            editor.putBoolean(KEY_BROWSER_DARK_PATTERN_BLOCKER, DEFAULT_BROWSER_DARK_PATTERN_BLOCKER);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_FAKE_PHONE_WARNER)) {
+            editor.putBoolean(KEY_BROWSER_FAKE_PHONE_WARNER, DEFAULT_BROWSER_FAKE_PHONE_WARNER);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_SCRIPTLET_INJECTION)) {
+            editor.putBoolean(KEY_BROWSER_SCRIPTLET_INJECTION, DEFAULT_BROWSER_SCRIPTLET_INJECTION);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_ANTI_ADBLOCK_DEFUSER)) {
+            editor.putBoolean(KEY_BROWSER_ANTI_ADBLOCK_DEFUSER, DEFAULT_BROWSER_ANTI_ADBLOCK_DEFUSER);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_POPUP_TRAP_BLOCKER)) {
+            editor.putBoolean(KEY_BROWSER_POPUP_TRAP_BLOCKER, DEFAULT_BROWSER_POPUP_TRAP_BLOCKER);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_REDIRECT_CHAIN_CLEANER)) {
+            editor.putBoolean(KEY_BROWSER_REDIRECT_CHAIN_CLEANER, DEFAULT_BROWSER_REDIRECT_CHAIN_CLEANER);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_ANTI_PAYWALL_WARNING)) {
+            editor.putBoolean(KEY_BROWSER_ANTI_PAYWALL_WARNING, DEFAULT_BROWSER_ANTI_PAYWALL_WARNING);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_SPONSORED_WIDGET_REMOVER)) {
+            editor.putBoolean(KEY_BROWSER_SPONSORED_WIDGET_REMOVER, DEFAULT_BROWSER_SPONSORED_WIDGET_REMOVER);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_FAKE_COUNTDOWN_REMOVER)) {
+            editor.putBoolean(KEY_BROWSER_FAKE_COUNTDOWN_REMOVER, DEFAULT_BROWSER_FAKE_COUNTDOWN_REMOVER);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_BROWSER_OVERLAY_REMOVER)) {
+            editor.putBoolean(KEY_BROWSER_OVERLAY_REMOVER, DEFAULT_BROWSER_OVERLAY_REMOVER);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_PROTECTION_MODE)) {
+            editor.putString(KEY_PROTECTION_MODE, DEFAULT_PROTECTION_MODE);
             changed = true;
         }
 
@@ -309,5 +441,49 @@ public final class PreferenceKeys {
         if (current.remove(value)) {
             prefs.edit().putStringSet(key, current).apply();
         }
+    }
+
+    // ===== Intent-Based Protection Modes (user-facing names from vision) =====
+    public static final String[] PROTECTION_MODES = {
+        "default", "study", "work", "kids", "elder", "shopping", "spiritual", "battery"
+    };
+
+    public static String modeDisplayName(String mode) {
+        if (mode == null) return "Default";
+        switch (mode) {
+            case "study": return "Study Mode";
+            case "work": return "Work Mode";
+            case "kids": return "Kids Mode";
+            case "elder": return "Elder Mode (Safe Search)";
+            case "shopping": return "Shopping Mode";
+            case "spiritual": return "Spiritual / Satvik Mode";
+            case "battery": return "Battery Saver Mode";
+            default: return "Default (Balanced)";
+        }
+    }
+
+    public static String modeDescription(String mode) {
+        if (mode == null) return "Balanced ad & tracker blocking";
+        switch (mode) {
+            case "study": return "Blocks YouTube recs, reels, distracting popups for focus";
+            case "work": return "Hides social widgets, notification trackers, chat popups";
+            case "kids": return "Strong blocks for adult, gambling, violent, scam content";
+            case "elder": return "Protects against fake banks, loans, KYC, medicine, APK scams + full Indian Scam Shield (9 categories)";
+            case "shopping": return "Kills fake discounts, aggressive trackers, coupon scams";
+            case "spiritual": return "Satvik/Dharma Clean — removes vulgar, gambling, political, dating ads on scripture & bhakti sites";
+            case "battery": return "Aggressive media ad + background tracker blocking to save power/data";
+            default: return "Standard protection with scam shield and regional filters";
+        }
+    }
+
+    public static String getCurrentMode(Context context) {
+        return prefs(context).getString(KEY_PROTECTION_MODE, DEFAULT_PROTECTION_MODE);
+    }
+
+    public static boolean isIndianScamShieldEnabled(Context context) {
+        return prefs(context).getBoolean(
+            KEY_INDIAN_SCAM_SHIELD_ENABLED,
+            DEFAULT_INDIAN_SCAM_SHIELD_ENABLED
+        );
     }
 }

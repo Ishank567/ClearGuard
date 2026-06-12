@@ -64,6 +64,9 @@ dependencies {
     implementation libs.androidx.compose.material3
     implementation libs.androidx.compose.material.icons.extended
 
+    // Google Fonts for premium typography (Inter)
+    implementation libs.androidx.compose.ui.text.google.fonts
+
     // Lifecycle + ViewModel for Compose
     implementation libs.androidx.lifecycle.viewmodel.compose
     implementation libs.androidx.lifecycle.runtime.compose
@@ -73,6 +76,13 @@ dependencies {
 
     // HTTP/2 DNS-over-HTTPS transport with connection pooling
     implementation libs.okhttp
+
+    // On-device OCR for Scam Screenshot Scanner (Indian Scam Shield)
+    implementation libs.mlkit.text.recognition
+
+    // On-device rule engine + small TFLite model for phishing classification
+    implementation libs.tensorflow.lite
+    implementation libs.tensorflow.lite.support
 
     debugImplementation libs.androidx.compose.ui.tooling
     debugImplementation libs.androidx.compose.ui.test.manifest

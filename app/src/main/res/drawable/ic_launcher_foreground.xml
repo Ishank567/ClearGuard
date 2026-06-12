@@ -1,26 +1,75 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Outer glowing red shield shadow / glow -->
+
+    <!-- Outer soft teal glow / ambient halo -->
     <path
-        android:fillColor="#4DFF3333"
-        android:pathData="M54,8 L90,21 L86,54 C82,76 71,91 54,102 C37,91 26,76 22,54 L18,21 Z" />
-    <!-- Main outer dark shield border -->
+        android:fillColor="#262DD4BF"
+        android:pathData="M54,6 L93,20 L89,56 C84,80 72,95 54,106 C36,95 24,80 19,56 L15,20 Z" />
+
+    <!-- Shield body — deep dark navy with teal gradient rim -->
+    <path android:pathData="M54,14 L87,26 L84,54 C80,74 70,87 54,97 C38,87 28,74 24,54 L21,26 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="14"
+                android:endX="54"   android:endY="97"
+                android:startColor="#1E2736"
+                android:endColor="#0C0F14" />
+        </aapt:attr>
+    </path>
+
+    <!-- Inner teal accent rim — glowing shield edge -->
+    <path android:pathData="M54,18 L83,29 L80,53 C77,71 68,83 54,92 C40,83 31,71 28,53 L25,29 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="18"
+                android:endX="54"   android:endY="92"
+                android:startColor="#2DD4BF"
+                android:endColor="#0D9488" />
+        </aapt:attr>
+    </path>
+
+    <!-- Inner dark shield panel (glass-like surface) -->
+    <path android:pathData="M54,22 L79,32 L77,51 C74,67 66,78 54,86 C42,78 34,67 31,51 L29,32 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="22"
+                android:endX="54"   android:endY="86"
+                android:startColor="#1A1F2E"
+                android:endColor="#0C0F14" />
+        </aapt:attr>
+    </path>
+
+    <!-- Specular glass highlight on top of inner panel -->
     <path
-        android:fillColor="#1A0D0D"
-        android:pathData="M54,12 L86,24 L82,52 C78,72 68,86 54,96 C40,86 30,72 26,52 L22,24 Z" />
-    <!-- Inner glowing red shield rim -->
+        android:fillColor="#0DFFFFFF"
+        android:pathData="M54,22 L79,32 L78,38 C65,35 43,35 30,38 L29,32 Z" />
+
+    <!-- DNS lock icon: padlock body -->
     <path
-        android:fillColor="#FF3333"
-        android:pathData="M54,18 L80,28 L77,50 C73,67 65,79 54,87 C43,79 35,67 31,50 L28,28 Z" />
-    <!-- Inner dark shield panel -->
+        android:fillColor="#2DD4BF"
+        android:pathData="M44,54 L64,54 Q66,54 66,56 L66,68 Q66,70 64,70 L44,70 Q42,70 42,68 L42,56 Q42,54 44,54 Z" />
+
+    <!-- DNS lock icon: shackle (arc) -->
     <path
-        android:fillColor="#0D0606"
-        android:pathData="M54,22 L76,30 L74,48 C70,63 63,73 54,80 C45,73 38,63 34,48 L32,30 Z" />
-    <!-- Central checkmark logo -->
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#2DD4BF"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:pathData="M47,54 L47,46 Q47,40 54,40 Q61,40 61,46 L61,54" />
+
+    <!-- DNS lock icon: keyhole -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M42,51 L50,59 L69,37 L74,42 L50,69 L37,56 Z" />
+        android:fillColor="#0C0F14"
+        android:pathData="M54,58 m-3.5,0 a3.5,3.5 0,1 1,7,0 a3.5,3.5 0,1 1,-7,0" />
+    <path
+        android:fillColor="#0C0F14"
+        android:pathData="M52.5,61 L55.5,61 L55,67 L53,67 Z" />
+
 </vector>

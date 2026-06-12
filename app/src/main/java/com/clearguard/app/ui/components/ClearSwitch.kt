@@ -21,6 +21,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.clearguard.app.ui.theme.ClearColors
@@ -34,9 +36,10 @@ fun ClearSwitch(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+    val haptic = LocalHapticFeedback.current
     
     val activeTrackColor = ClearColors.green
-    val inactiveTrackColor = if (ClearColors.useGlass) ClearColors.border.copy(alpha = 0.65f) else Color(0xFF1C1313)
+    val inactiveTrackColor = if (ClearColors.useGlass) ClearColors.border.copy(alpha = 0.65f) else ClearColors.border
     
     val trackColor by animateColorAsState(
         targetValue = if (checked) activeTrackColor else inactiveTrackColor,
@@ -65,6 +68,12 @@ fun ClearSwitch(
     
     Box(
         modifier = modifier
+            .shadow(
+                elevation = if (checked) 8.dp else 0.dp,
+                shape = RoundedCornerShape(15.dp),
+                ambientColor = if (checked) ClearColors.green.copy(alpha = 0.35f) else Color.Transparent,
+                spotColor = Color.Transparent
+            )
             .size(width = width, height = height)
             .clip(RoundedCornerShape(15.dp))
             .background(trackColor)
@@ -78,7 +87,10 @@ fun ClearSwitch(
                 indication = null,
                 enabled = enabled,
                 role = Role.Switch,
-                onClick = { onCheckedChange(!checked) }
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onCheckedChange(!checked)
+                }
             ),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -96,7 +108,7 @@ fun ClearSwitch(
                 .clip(CircleShape)
                 .background(
                     brush = Brush.verticalGradient(
-                        listOf(Color.White, Color(0xFFF1F5F9))
+                        listOf(Color.White, ClearColors.panel)
                     )
                 )
                 .border(

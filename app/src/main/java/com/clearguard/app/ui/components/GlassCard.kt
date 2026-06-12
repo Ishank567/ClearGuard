@@ -1,7 +1,13 @@
 package com.clearguard.app.ui.components
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -9,11 +15,14 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.clearguard.app.ui.theme.ClearColors
@@ -154,6 +163,47 @@ fun GlassCardHero(
         cornerRadius = ClearDesign.heroCorner,
         glassAlpha = ClearDesign.heroGlassAlpha,
         elevation = ClearDesign.heroElevation,
+        content = content
+    )
+}
+
+/**
+ * Tappable glass card with press-down feedback (scale, elevation, brightness).
+ */
+@Composable
+fun GlassCardInteractive(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = ClearDesign.cardCorner,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = tween(ClearDesign.pressFeedbackMs),
+        label = "cardScale"
+    )
+    val elevation by animateDpAsState(
+        targetValue = if (pressed) 6.dp else ClearDesign.cardElevation,
+        animationSpec = tween(ClearDesign.pressFeedbackMs),
+        label = "cardElev"
+    )
+
+    GlassCard(
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick
+            ),
+        cornerRadius = cornerRadius,
+        elevation = elevation,
         content = content
     )
 }

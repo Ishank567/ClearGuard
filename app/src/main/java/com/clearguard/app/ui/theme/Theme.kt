@@ -4,7 +4,6 @@ import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -55,9 +54,9 @@ private val LightColorScheme = lightColorScheme(
 
 private val DarkColorScheme = darkColorScheme(
     primary = ClearPalettes.dark.green,
-    onPrimary = Color(0xFF06281A),
+    onPrimary = Color(0xFF0C0F14),
     secondary = ClearPalettes.dark.blue,
-    onSecondary = Color(0xFF0A1A3A),
+    onSecondary = Color(0xFF0C0F14),
     background = ClearPalettes.dark.bg,
     onBackground = ClearPalettes.dark.text,
     surface = ClearPalettes.dark.panel,
@@ -103,7 +102,7 @@ fun ClearGuardTheme(
 
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
-        typography = Typography(),
+        typography = ClearTypography,
         content = content
     )
 }
@@ -168,25 +167,28 @@ fun ClearMeshBackground(darkTheme: Boolean) {
 
         // Draw blurry soft mesh neon gradients
         if (darkTheme) {
+            // Teal ambient glow — primary brand warmth
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(ClearColors.green.copy(alpha = 0.16f), Color.Transparent),
+                    colors = listOf(ClearColors.green.copy(alpha = 0.10f), Color.Transparent),
                     radius = w * 0.70f
                 ),
                 center = Offset(w * (xOffset1 / 100f), h * (yOffset1 / 100f)),
                 radius = w * 0.70f
             )
+            // Sky blue ambient glow — informational accent
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(ClearColors.blue.copy(alpha = 0.14f), Color.Transparent),
+                    colors = listOf(ClearColors.blue.copy(alpha = 0.08f), Color.Transparent),
                     radius = w * 0.80f
                 ),
                 center = Offset(w * (xOffset2 / 100f), h * (yOffset2 / 100f)),
                 radius = w * 0.80f
             )
+            // Deep indigo ambient glow — subtle depth
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF5C0E0E).copy(alpha = 0.12f), Color.Transparent),
+                    colors = listOf(Color(0xFF4338CA).copy(alpha = 0.07f), Color.Transparent),
                     radius = w * 0.75f
                 ),
                 center = Offset(w * (xOffset3 / 100f), h * (yOffset3 / 100f)),

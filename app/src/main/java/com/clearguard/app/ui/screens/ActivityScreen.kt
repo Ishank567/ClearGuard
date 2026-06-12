@@ -55,6 +55,7 @@ import com.clearguard.app.blocking.HostBlocker
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.LiquidGlassButton
 import com.clearguard.app.ui.theme.ClearColors
+import com.clearguard.app.ui.theme.ClearDesign
 import com.clearguard.app.vpn.ClearGuardVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -131,7 +132,7 @@ fun ActivityScreen(isProtected: Boolean) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .padding(horizontal = ClearDesign.screenHPadding, vertical = 12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -182,7 +183,7 @@ fun ActivityScreen(isProtected: Boolean) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(if (ClearColors.useGlass) ClearColors.glass.copy(alpha = 0.40f) else Color(0xFF0F0707)),
+                        .background(if (ClearColors.useGlass) ClearColors.glass.copy(alpha = 0.40f) else ClearColors.panel),
                     placeholder = { Text("Search domain...", color = ClearColors.muted, fontSize = 14.sp) },
                     leadingIcon = {
                         Icon(
@@ -238,7 +239,7 @@ fun ActivityScreen(isProtected: Boolean) {
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) chipColor.copy(alpha = bgAlpha) else (if (ClearColors.useGlass) ClearColors.glass.copy(alpha = 0.4f) else Color(0xFF0F0707)))
+                                .background(if (isSelected) chipColor.copy(alpha = bgAlpha) else (if (ClearColors.useGlass) ClearColors.glass.copy(alpha = 0.4f) else ClearColors.panel))
                                 .border(1.dp, if (isSelected) chipColor.copy(alpha = borderAlpha) else ClearColors.border.copy(alpha = borderAlpha), RoundedCornerShape(12.dp))
                                 .clickable { filterStatus = chip }
                                 .padding(vertical = 8.dp),

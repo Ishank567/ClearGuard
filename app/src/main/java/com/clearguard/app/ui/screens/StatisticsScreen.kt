@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.clearguard.app.PreferenceKeys
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.theme.ClearColors
+import com.clearguard.app.ui.theme.ClearDesign
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
@@ -72,7 +73,7 @@ fun StatisticsScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp)
+            .padding(horizontal = ClearDesign.screenHPadding, vertical = 12.dp)
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),

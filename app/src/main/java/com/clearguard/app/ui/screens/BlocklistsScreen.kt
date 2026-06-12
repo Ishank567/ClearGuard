@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.runtime.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -28,6 +30,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.clearguard.app.ui.components.LiquidGlassButton
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +61,7 @@ import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.LiquidGlassButton
 import com.clearguard.app.ui.components.LiquidGlassIconButton
 import com.clearguard.app.ui.theme.ClearColors
+import com.clearguard.app.ui.theme.ClearDesign
 import com.clearguard.app.vpn.ClearGuardVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -67,6 +75,13 @@ import java.util.Date
 import java.util.Locale
 
 data class BlocklistRow(val name: String, val count: String, val source: String)
+
+data class Conflict(
+    val domain: String,
+    val type: String,
+    val description: String,
+    val actions: List<String>
+)
 
 @Composable
 fun BlocklistsScreen() {
@@ -109,6 +124,18 @@ fun BlocklistsScreen() {
     }
     var newAllow by remember { mutableStateOf("") }
     var allowError by remember { mutableStateOf("") }
+
+    // Filter conflict detector state
+    var conflicts by remember { mutableStateOf(emptyList<Conflict>()) }
+    var lastConflictCheck by remember { mutableStateOf(0L) }
+
+    // Auto-detect conflicts on load / when user rules change (convenient for the detector feature)
+    LaunchedEffect(customBlocks.size, securityBlocks.size, allowList.size) {
+        if (customBlocks.isNotEmpty() || securityBlocks.isNotEmpty() || allowList.isNotEmpty()) {
+            conflicts = detectConflicts(context, customBlocks, securityBlocks, allowList)
+            lastConflictCheck = System.currentTimeMillis()
+        }
+    }
 
     fun refreshActiveHosts() {
         activeHosts = HostBlocker.get(context).snapshot().blockedHostCount
@@ -298,7 +325,7 @@ fun BlocklistsScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 12.dp)
+            .padding(horizontal = ClearDesign.screenHPadding, vertical = 12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -402,6 +429,158 @@ fun BlocklistsScreen() {
                         onEnabledChange = { enabled -> setSourceEnabled(url, enabled) },
                         onRemove = null
                     )
+                }
+            }
+
+            // --- Personal Block AI (natural language) ---
+            item {
+                GlassCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Personal Block AI", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = ClearColors.green)
+                        Text("Describe what to block. Example: \"Block all betting ads and loan ads.\"", fontSize = 12.sp, color = ClearColors.muted)
+                        Spacer(Modifier.height(8.dp))
+
+                        var aiQuery by remember { mutableStateOf("") }
+                        OutlinedTextField(
+                            value = aiQuery,
+                            onValueChange = { aiQuery = it },
+                            placeholder = { Text("Block betting, fake loans, investment scams...", fontSize = 13.sp) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = {
+                                if (aiQuery.isNotBlank()) {
+                                    val added = applyPersonalBlockAI(context, aiQuery)
+                                    customBlocks.addAll(added)
+                                    aiQuery = ""
+                                }
+                            })
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        LiquidGlassButton(
+                            onClick = {
+                                if (aiQuery.isNotBlank()) {
+                                    val added = applyPersonalBlockAI(context, aiQuery)
+                                    customBlocks.addAll(added)
+                                    aiQuery = ""
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Parse & Apply Rules")
+                        }
+                    }
+                }
+            }
+
+            // --- Filter Conflict Detector ---
+            item {
+                GlassCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Filter Conflict Detector", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = ClearColors.green)
+                        Text("Detect overlapping or contradictory rules between custom blocks, security blocks, allowlist, and downloaded filters.", fontSize = 12.sp, color = ClearColors.muted)
+                        Spacer(Modifier.height(8.dp))
+
+                        LiquidGlassButton(
+                            onClick = {
+                                val newConflicts = detectConflicts(
+                                    context,
+                                    customBlocks,
+                                    securityBlocks,
+                                    allowList
+                                )
+                                conflicts = newConflicts
+                                lastConflictCheck = System.currentTimeMillis()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Run Conflict Detector")
+                        }
+
+                        if (conflicts.isNotEmpty()) {
+                            Spacer(Modifier.height(12.dp))
+                            Text("${conflicts.size} conflict(s) found:", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                            conflicts.forEach { conflict ->
+                                Spacer(Modifier.height(6.dp))
+                                GlassCard(glassAlpha = 0.7f) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(conflict.domain, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = ClearColors.danger)
+                                        Text("${conflict.type}: ${conflict.description}", fontSize = 12.sp, color = ClearColors.text)
+                                        Spacer(Modifier.height(8.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            conflict.actions.forEach { action ->
+                                                LiquidGlassButton(
+                                                    onClick = {
+                                                        when (action) {
+                                                            "Remove from allowlist" -> {
+                                                                removeAllow(conflict.domain)
+                                                                applyRulesChanged()
+                                                            }
+                                                            "Remove from custom blocks" -> {
+                                                                removeCustomBlock(conflict.domain)
+                                                                applyRulesChanged()
+                                                            }
+                                                            "Remove from security blocks" -> {
+                                                                removeSecurityBlock(conflict.domain)
+                                                                applyRulesChanged()
+                                                            }
+                                                        }
+                                                        // Re-run detection after resolve
+                                                        conflicts = detectConflicts(context, customBlocks, securityBlocks, allowList)
+                                                    },
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text(action, fontSize = 11.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (lastConflictCheck > 0) {
+                            Spacer(Modifier.height(8.dp))
+                            Text("No conflicts detected in your user rules.", fontSize = 12.sp, color = ClearColors.muted)
+                        }
+                    }
+                }
+            }
+
+            // Wire risk into custom block auto-suggest: High Risk Phones from local FRI DB
+            item {
+                GlassCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Suggested High-Risk Phones (FRI DB)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ClearColors.danger)
+                        Text("From local fri_risk_db.txt + runtime seeds. Tap to add to security blocks (auto-suggest for blocking high-risk senders).", fontSize = 11.sp, color = ClearColors.muted)
+                        Spacer(Modifier.height(8.dp))
+
+                        val highRisk = remember { com.clearguard.app.security.OnDeviceRuleEngine.getHighRiskPhones(10) }
+                        if (highRisk.isEmpty()) {
+                            Text("No high-risk entries loaded.", fontSize = 12.sp, color = ClearColors.muted)
+                        } else {
+                            highRisk.forEach { num ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(num, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                                    LiquidGlassButton(
+                                        onClick = {
+                                            val marker = "phone:$num"
+                                            if (PreferenceKeys.addToStringSet(context, PreferenceKeys.KEY_SECURITY_BLOCKS, marker)) {
+                                                securityBlocks.add(marker)
+                                                applyRulesChanged()
+                                            }
+                                        },
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("Add to Security", fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -712,6 +891,7 @@ private fun buildBackupJson(context: android.content.Context): String {
 
     val settings = JSONObject()
     settings.put("scam_shield_enabled", prefs.getBoolean(PreferenceKeys.KEY_SCAM_SHIELD_ENABLED, PreferenceKeys.DEFAULT_SCAM_SHIELD_ENABLED))
+    settings.put("indian_scam_shield_enabled", prefs.getBoolean(PreferenceKeys.KEY_INDIAN_SCAM_SHIELD_ENABLED, PreferenceKeys.DEFAULT_INDIAN_SCAM_SHIELD_ENABLED))
     settings.put("doh_enabled", prefs.getBoolean(PreferenceKeys.KEY_DOH_ENABLED, PreferenceKeys.DEFAULT_DOH_ENABLED))
     settings.put("doh_url", prefs.getString(PreferenceKeys.KEY_DOH_URL, PreferenceKeys.DEFAULT_DOH_URL))
     settings.put("doh_provider", prefs.getString(PreferenceKeys.KEY_DOH_PROVIDER, PreferenceKeys.DEFAULT_DOH_PROVIDER))
@@ -800,6 +980,9 @@ private fun applyBackupJson(context: android.content.Context, raw: String): Stri
     root.optJSONObject("settings")?.let { settings ->
         if (settings.has("scam_shield_enabled")) {
             editor.putBoolean(PreferenceKeys.KEY_SCAM_SHIELD_ENABLED, settings.optBoolean("scam_shield_enabled", PreferenceKeys.DEFAULT_SCAM_SHIELD_ENABLED))
+            if (settings.has("indian_scam_shield_enabled")) {
+                editor.putBoolean(PreferenceKeys.KEY_INDIAN_SCAM_SHIELD_ENABLED, settings.optBoolean("indian_scam_shield_enabled", PreferenceKeys.DEFAULT_INDIAN_SCAM_SHIELD_ENABLED))
+            }
         }
         if (settings.has("doh_enabled")) {
             editor.putBoolean(PreferenceKeys.KEY_DOH_ENABLED, settings.optBoolean("doh_enabled", PreferenceKeys.DEFAULT_DOH_ENABLED))
@@ -863,6 +1046,127 @@ private fun persistDisabledSources(prefs: android.content.SharedPreferences, sou
     prefs.edit()
         .putStringSet(PreferenceKeys.KEY_DISABLED_SOURCE_URLS, LinkedHashSet(sources))
         .apply()
+}
+
+// === Personal Block AI Parser (simple on-device natural language → custom blocks) ===
+private fun applyPersonalBlockAI(context: Context, query: String): List<String> {
+    val lower = query.lowercase()
+    val termsToBlock = mutableSetOf<String>()
+
+    val categoryMap = mapOf(
+        "bet" to listOf("bet", "dream11", "rummy", "casino", "1xbet", "dafabet", "betway", "gambl", "lottery"),
+        "loan" to listOf("loan", "instantloan", "quickloan", "credit", "kredit", "rupee loan", "personal loan"),
+        "invest" to listOf("invest", "double money", "guaranteed", "trading", "crypto", "bitcoin", "mutual fund", "forex"),
+        "job" to listOf("job", "parttime", "work from home", "earn from home", "registration fee", "hiring"),
+        "kyc" to listOf("kyc", "ekyc", "update kyc"),
+        "support" to listOf("customer care", "helpline", "toll free", "support number"),
+        "apk" to listOf("apk", "install app", "download app"),
+        "ad" to listOf("ad", "ads", "sponsored", "promo")
+    )
+
+    categoryMap.forEach { (key, terms) ->
+        if (lower.contains(key) || terms.any { lower.contains(it) }) {
+            termsToBlock.addAll(terms)
+        }
+    }
+
+    lower.split(Regex("[\\s,]+")).forEach { word ->
+        if (word.length > 3 && (word.contains(".") || word.contains("ad") || word.contains("bet") || word.contains("loan"))) {
+            HostBlocker.normalizeDomain(word)?.let { termsToBlock.add(it) }
+        }
+    }
+
+    if (termsToBlock.isEmpty()) {
+        termsToBlock.addAll(lower.split(Regex("[\\s,]+")).filter { it.length > 2 })
+    }
+
+    val addedTerms = mutableListOf<String>()
+    termsToBlock.forEach { term ->
+        val normalized = HostBlocker.normalizeDomain(term) ?: term.lowercase()
+        if (PreferenceKeys.addToStringSet(context, PreferenceKeys.KEY_CUSTOM_BLOCKS, normalized)) {
+            addedTerms.add(normalized)
+        }
+    }
+
+    HostBlocker.get(context).reload()
+    ClearGuardVpnService.reloadIfRunning(context)
+    return addedTerms
+}
+
+private fun detectConflicts(
+    context: Context,
+    customBlocks: List<String>,
+    securityBlocks: List<String>,
+    allowList: List<String>
+): List<Conflict> {
+    val conflicts = mutableListOf<Conflict>()
+    val customSet = customBlocks.toSet()
+    val securitySet = securityBlocks.toSet()
+    val allowSet = allowList.toSet()
+
+    // 1. Custom block conflicting with allowlist (allowlist wins)
+    customSet.intersect(allowSet).forEach { domain ->
+        conflicts.add(
+            Conflict(
+                domain,
+                "Custom Block vs Allowlist",
+                "This domain is explicitly blocked by you but also allowed. The allowlist takes precedence.",
+                listOf("Remove from allowlist", "Remove from custom blocks")
+            )
+        )
+    }
+
+    // 2. Security block conflicting with allowlist (serious, security intent overridden)
+    securitySet.intersect(allowSet).forEach { domain ->
+        conflicts.add(
+            Conflict(
+                domain,
+                "Security Block vs Allowlist",
+                "High-priority security block (scam/malware) is being allowed. This may be dangerous.",
+                listOf("Remove from allowlist", "Remove from security blocks")
+            )
+        )
+    }
+
+    // 3. Redundant custom block (already in downloaded filter lists)
+    try {
+        val dlFile = HostBlocker.downloadedHostsFile(context)
+        if (dlFile.exists()) {
+            val downloaded = mutableSetOf<String>()
+            dlFile.forEachLine { line ->
+                downloaded.addAll(HostBlocker.hostsFromLine(line))
+            }
+            customSet.intersect(downloaded).forEach { domain ->
+                conflicts.add(
+                    Conflict(
+                        domain,
+                        "Redundant Custom Block",
+                        "This domain is already blocked by one or more of your active downloaded filter lists.",
+                        listOf("Remove from custom blocks")
+                    )
+                )
+            }
+        }
+    } catch (e: Exception) {
+        // Ignore read errors
+    }
+
+    // 4. Custom block also in security blocks (redundant double-block)
+    customSet.intersect(securitySet).forEach { domain ->
+        conflicts.add(
+            Conflict(
+                domain,
+                "Custom vs Security Block",
+                "Domain blocked in both your custom blocks and security blocks (redundant).",
+                listOf("Remove from custom blocks", "Remove from security blocks")
+            )
+        )
+    }
+
+    // 5. Allowlist item that doesn't seem to be blocking anything useful (optional, low priority)
+    // For now, skip heavy full-block-set computation
+
+    return conflicts
 }
 
 private fun normalizeSourceUrl(input: String): String? {

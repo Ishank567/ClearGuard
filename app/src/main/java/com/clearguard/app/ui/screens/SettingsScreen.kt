@@ -13,6 +13,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -35,6 +42,7 @@ import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.LiquidGlassButton
 import com.clearguard.app.ui.components.ClearSwitch
 import com.clearguard.app.ui.theme.ClearColors
+import com.clearguard.app.ui.theme.ClearDesign
 import com.clearguard.app.ui.theme.ThemeMode
 import com.clearguard.app.vpn.ClearGuardVpnService
 
@@ -45,6 +53,8 @@ fun SettingsScreen(
     onProtectionChange: (Boolean) -> Unit,
     scamShieldEnabled: Boolean,
     onScamShieldChange: (Boolean) -> Unit,
+    indianScamShieldEnabled: Boolean,
+    onIndianScamShieldChange: (Boolean) -> Unit,
     dohEnabled: Boolean,
     onDohEnabledChange: (Boolean) -> Unit,
     themeMode: ThemeMode,
@@ -146,8 +156,8 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = ClearDesign.screenHPadding, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(ClearDesign.cardSpacing)
     ) {
         // Protection switch card
         GlassCard {
@@ -215,7 +225,21 @@ fun SettingsScreen(
         }
 
         // --- SECTION 1: AI Firewall Features ---
-        Text("AI Firewall Rules", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
+        var firewallExpanded by remember { mutableStateOf(true) }
+        SectionHeader(
+            icon = Icons.Default.Security,
+            title = "AI Firewall Rules",
+            accentColor = ClearColors.green,
+            expanded = firewallExpanded,
+            onToggle = { firewallExpanded = !firewallExpanded }
+        )
+
+        AnimatedVisibility(
+            visible = firewallExpanded,
+            enter = expandVertically(tween(250)),
+            exit = shrinkVertically(tween(200))
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
         // Per-app block card
         GlassCard {
@@ -371,8 +395,24 @@ fun SettingsScreen(
             }
         }
 
+        }} // close Column + AnimatedVisibility for Firewall section
+
         // --- SECTION 2: AI scam heuristics & regional packs ---
-        Text("AI Scam & Impersonation Shield", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
+        var scamExpanded by remember { mutableStateOf(true) }
+        SectionHeader(
+            icon = Icons.Default.GppBad,
+            title = "AI Scam & Impersonation Shield",
+            accentColor = ClearColors.danger,
+            expanded = scamExpanded,
+            onToggle = { scamExpanded = !scamExpanded }
+        )
+
+        AnimatedVisibility(
+            visible = scamExpanded,
+            enter = expandVertically(tween(250)),
+            exit = shrinkVertically(tween(200))
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
         // Threat Shield scam blocker
         GlassCard {
@@ -392,6 +432,106 @@ fun SettingsScreen(
                     onCheckedChange = { enabled ->
                         onScamShieldChange(enabled)
                         ClearGuardVpnService.reloadIfRunning(context)
+                    }
+                )
+            }
+        }
+
+        // On-device rule engine + TFLite phishing classifier (advanced)
+        GlassCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("On-device Rule Engine + Phishing ML", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text("Fast local regex/heuristics + optional small TFLite model for phishing text/URL classification. All processing stays on your device.", fontSize = 11.sp, color = ClearColors.muted)
+                Spacer(Modifier.height(10.dp))
+
+                var ruleEngine by remember {
+                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_ON_DEVICE_RULE_ENGINE_ENABLED, PreferenceKeys.DEFAULT_ON_DEVICE_RULE_ENGINE_ENABLED))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("On-device rules (recommended)", modifier = Modifier.weight(1f), fontSize = 13.sp)
+                    ClearSwitch(
+                        checked = ruleEngine,
+                        onCheckedChange = {
+                            ruleEngine = it
+                            prefs.edit().putBoolean(PreferenceKeys.KEY_ON_DEVICE_RULE_ENGINE_ENABLED, it).apply()
+                        }
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+
+                var tflite by remember {
+                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_PHISHING_TFLITE_ENABLED, PreferenceKeys.DEFAULT_PHISHING_TFLITE_ENABLED))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("TFLite phishing model (requires assets/phishing_model.tflite)", modifier = Modifier.weight(1f), fontSize = 13.sp)
+                    ClearSwitch(
+                        checked = tflite,
+                        onCheckedChange = {
+                            tflite = it
+                            prefs.edit().putBoolean(PreferenceKeys.KEY_PHISHING_TFLITE_ENABLED, it).apply()
+                        }
+                    )
+                }
+            }
+        }
+
+        // Mobile Risk Scoring (FRI-like), UPI Payee Verification, RASP (roadmap features)
+        GlassCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Mobile Risk / UPI / RASP (on-device)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+
+                var mobileRisk by remember {
+                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_MOBILE_RISK_SCORING_ENABLED, PreferenceKeys.DEFAULT_MOBILE_RISK_SCORING_ENABLED))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Mobile Number Risk Scoring (FRI heuristic)", modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    ClearSwitch(checked = mobileRisk, onCheckedChange = { mobileRisk = it; prefs.edit().putBoolean(PreferenceKeys.KEY_MOBILE_RISK_SCORING_ENABLED, it).apply() })
+                }
+
+                var remoteSignals by remember {
+                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_MOBILE_RISK_REMOTE_SIGNALS, PreferenceKeys.DEFAULT_MOBILE_RISK_REMOTE_SIGNALS))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Use Remote FRI/Operator Signals (Enterprise API)", modifier = Modifier.weight(1f), fontSize = 12.sp, color = ClearColors.muted)
+                    ClearSwitch(checked = remoteSignals, onCheckedChange = { remoteSignals = it; prefs.edit().putBoolean(PreferenceKeys.KEY_MOBILE_RISK_REMOTE_SIGNALS, it).apply() })
+                }
+
+                var upiVerify by remember {
+                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_UPI_PAYEE_VERIFICATION_ENABLED, PreferenceKeys.DEFAULT_UPI_PAYEE_VERIFICATION_ENABLED))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("UPI Payee Verification & Delay Risk", modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    ClearSwitch(checked = upiVerify, onCheckedChange = { upiVerify = it; prefs.edit().putBoolean(PreferenceKeys.KEY_UPI_PAYEE_VERIFICATION_ENABLED, it).apply() })
+                }
+
+                var rasp by remember {
+                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_RASP_ENABLED, PreferenceKeys.DEFAULT_RASP_ENABLED))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("RASP + Anti-tamper (root/hook/stub)", modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    ClearSwitch(checked = rasp, onCheckedChange = { rasp = it; prefs.edit().putBoolean(PreferenceKeys.KEY_RASP_ENABLED, it).apply() })
+                }
+            }
+        }
+
+        // === Dedicated Indian Scam Shield (user-requested 9 categories) ===
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Indian Scam Shield", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = ClearColors.green)
+                    Text("Dedicated protection: UPI KYC • Fake electricity bill • Courier delivery fee • Loan approval • Job registration fee • Government scheme • Investment group • Fake APK • Customer care number", fontSize = 11.sp, color = ClearColors.muted)
+                }
+                ClearSwitch(
+                    checked = indianScamShieldEnabled,
+                    onCheckedChange = { enabled ->
+                        onIndianScamShieldChange(enabled)
                     }
                 )
             }
@@ -445,8 +585,24 @@ fun SettingsScreen(
             }
         }
 
+        }} // close Column + AnimatedVisibility for Scam section
+
         // --- SECTION 3: DNS settings, Encryption (DoH) & Diagnostics ---
-        Text("Secure DNS & Diagnostic Tools", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
+        var dnsExpanded by remember { mutableStateOf(true) }
+        SectionHeader(
+            icon = Icons.Default.Dns,
+            title = "Secure DNS & Diagnostic Tools",
+            accentColor = ClearColors.blue,
+            expanded = dnsExpanded,
+            onToggle = { dnsExpanded = !dnsExpanded }
+        )
+
+        AnimatedVisibility(
+            visible = dnsExpanded,
+            enter = expandVertically(tween(250)),
+            exit = shrinkVertically(tween(200))
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
         // DNS Leak Test Panel
         GlassCard {
@@ -620,6 +776,8 @@ fun SettingsScreen(
                 }
             }
         }
+
+        }} // close Column + AnimatedVisibility for DNS section
 
         // App Split Tunnel exclusions
         GlassCard {
@@ -961,3 +1119,52 @@ private data class Provider(
     val desc: String
 )
 
+/**
+ * Collapsible section header with colored icon, accent text, and animated chevron.
+ */
+@Composable
+private fun SectionHeader(
+    icon: ImageVector,
+    title: String,
+    accentColor: Color,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 0f else -90f,
+        animationSpec = tween(200),
+        label = "chevron"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onToggle() }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = accentColor,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            text = title,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = accentColor,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            imageVector = Icons.Default.ExpandMore,
+            contentDescription = if (expanded) "Collapse" else "Expand",
+            tint = ClearColors.muted,
+            modifier = Modifier
+                .size(20.dp)
+                .graphicsLayer { rotationZ = chevronRotation }
+        )
+    }
+}

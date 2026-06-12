@@ -8,12 +8,15 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.animation.core.LinearEasing
@@ -33,8 +36,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clearguard.app.PreferenceKeys
@@ -42,6 +48,7 @@ import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardHero
 import com.clearguard.app.ui.components.LiquidGlassIconButton
 import com.clearguard.app.ui.theme.ClearColors
+import com.clearguard.app.ui.theme.ClearDesign
 
 @Composable
 fun DashboardScreen(
@@ -60,18 +67,24 @@ fun DashboardScreen(
         label = "blockedToday"
     )
 
+    val haptic = LocalHapticFeedback.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = ClearDesign.screenHPadding)
             .padding(top = 8.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(ClearDesign.cardSpacing)
     ) {
         GlassCardHero(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(210.dp)
-                .clickable { onToggleProtection(!isProtected) }
+                .clickable {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggleProtection(!isProtected)
+                }
         ) {
             Column(
                 modifier = Modifier.fillMaxSize(),
@@ -145,7 +158,10 @@ fun DashboardScreen(
                         )
                     }
                     LiquidGlassIconButton(
-                        onClick = { onToggleProtection(!isProtected) },
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onToggleProtection(!isProtected)
+                        },
                         modifier = Modifier.graphicsLayer {
                             scaleX = scale
                             scaleY = scale
@@ -214,70 +230,75 @@ fun DashboardScreen(
             )
         }
 
-        // One-tap security modes selector
-        Text("Security Profiles", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
+        // ===== Intent-Based Blocking: Full Protection Modes (user vision) =====
+        Text("Protection Mode", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
         
         val context = LocalContext.current
         val prefs = remember { PreferenceKeys.prefs(context) }
         var currentMode by remember {
-            mutableStateOf(prefs.getString(PreferenceKeys.KEY_SECURITY_MODE, PreferenceKeys.DEFAULT_SECURITY_MODE) ?: "strict")
+            mutableStateOf(PreferenceKeys.getCurrentMode(context))
         }
         
-        val modes = listOf(
-            Triple("basic", "Basic", Icons.Default.Verified),
-            Triple("strict", "Strict", Icons.Default.Security),
-            Triple("family", "Family", Icons.Default.ChildCare),
-            Triple("gaming", "Gaming", Icons.Default.Gamepad),
-            Triple("battery", "Saver", Icons.Default.BatteryChargingFull)
+        // Exact modes from the product vision (Study / Work / Kids / Elder / Shopping / Spiritual / Battery Saver)
+        val visionModes = listOf(
+            "default" to Icons.Default.Shield,
+            "study" to Icons.Default.MenuBook,
+            "work" to Icons.Default.Work,
+            "kids" to Icons.Default.ChildCare,
+            "elder" to Icons.Default.Elderly,
+            "shopping" to Icons.Default.ShoppingCart,
+            "spiritual" to Icons.Default.SelfImprovement,
+            "battery" to Icons.Default.BatterySaver
         )
         
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            modes.forEach { (modeId, label, icon) ->
-                val selected = currentMode == modeId
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(60.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (selected) ClearColors.green.copy(alpha = 0.18f) else ClearColors.bg.copy(alpha = 0.25f))
-                        .border(
-                            width = 1.dp,
-                            color = if (selected) ClearColors.green.copy(alpha = 0.35f) else ClearColors.border.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .clickable {
+        Column {
+            // First row of 4
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                visionModes.take(4).forEach { (modeId, icon) ->
+                    ModePill(
+                        modeId = modeId,
+                        label = PreferenceKeys.modeDisplayName(modeId),
+                        icon = icon,
+                        selected = currentMode == modeId,
+                        onSelect = {
                             currentMode = modeId
-                            prefs.edit().putString(PreferenceKeys.KEY_SECURITY_MODE, modeId).apply()
+                            prefs.edit().putString(PreferenceKeys.KEY_PROTECTION_MODE, modeId).apply()
                             com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(context)
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(icon, contentDescription = null, tint = if (selected) ClearColors.green else ClearColors.muted, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.height(2.dp))
-                        Text(label, fontSize = 10.sp, color = if (selected) ClearColors.green else ClearColors.text, fontWeight = FontWeight.Medium)
-                    }
+                        }
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            // Second row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                visionModes.drop(4).forEach { (modeId, icon) ->
+                    ModePill(
+                        modeId = modeId,
+                        label = PreferenceKeys.modeDisplayName(modeId),
+                        icon = icon,
+                        selected = currentMode == modeId,
+                        onSelect = {
+                            currentMode = modeId
+                            prefs.edit().putString(PreferenceKeys.KEY_PROTECTION_MODE, modeId).apply()
+                            com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(context)
+                        }
+                    )
                 }
             }
         }
         
-        // Mode description card
-        val modeDesc = when (currentMode) {
-            "basic" -> "Blocks standard advertisements and telemetry trackers."
-            "strict" -> "Strict protection. Blocks social widgets, fingerprinters and scam domains."
-            "family" -> "Safe for kids. Blocks adult sites, gambling, and short-video apps (TikTok)."
-            "gaming" -> "Optimized for latency. Uses Cloudflare DoH and caches DNS for 30 minutes."
-            "battery" -> "Optimized for battery. Disables DoH encryption, caches DNS queries for 1 hour."
-            else -> ""
-        }
+        // Dynamic description from PreferenceKeys (localized to vision)
         Text(
-            text = modeDesc,
+            text = PreferenceKeys.modeDescription(currentMode),
             fontSize = 11.sp,
             color = ClearColors.muted,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, top = 2.dp)
         )
 
         GlassCard(
@@ -298,8 +319,11 @@ fun DashboardScreen(
                 )
                 Spacer(Modifier.height(12.dp))
                 val threatShieldStatus = when (currentMode) {
-                    "strict" -> "Strict (Ads, Social, Fingerprint, Scam)"
-                    "family" -> "Family (Adult, Gambling, Short Video)"
+                    "kids", "elder" -> "Maximum (Kids / Elder Safe Search)"
+                    "spiritual" -> "Satvik / Dharma Clean + Scam Shield"
+                    "study", "work" -> "Focus (Distraction + Scam)"
+                    "shopping" -> "Deal Protection + Trackers"
+                    "battery" -> "Battery Optimized (Minimal DoH)"
                     else -> if (scamShieldEnabled) {
                         "On-device (scam + DGA)"
                     } else {
@@ -324,6 +348,9 @@ fun DashboardScreen(
 
                 StatusRow("DNS Filtering", if (isProtected) "Active" else "Paused")
                 StatusRow("Threat Shield", threatShieldStatus)
+                if (PreferenceKeys.isIndianScamShieldEnabled(context)) {
+                    StatusRow("Indian Scam Shield", "Active — 9 India-specific scam types protected")
+                }
                 StatusRow("Secure DNS", secureDnsStatus)
                 StatusRow("Local Cache", cacheTtlText)
                 StatusRow(
@@ -343,7 +370,131 @@ fun DashboardScreen(
                     ) "Automatic (daily)" else "Manual only"
                 )
                 StatusRow("Telemetry", "None")
+
+                // Gamification hint (Privacy Challenge)
+                val blockedTodayVal = blockedToday
+                val gamifyIcon = when {
+                    blockedTodayVal > 5000 -> "🔥"
+                    blockedTodayVal > 1500 -> "🥇"
+                    blockedTodayVal > 400 -> "🥈"
+                    else -> "🛡️"
+                }
+                val gamifyLabel = when {
+                    blockedTodayVal > 5000 -> "Legendary streak — top tier privacy this session"
+                    blockedTodayVal > 1500 -> "Gold level — excellent clean browsing"
+                    blockedTodayVal > 400 -> "Silver — good momentum, keep the shield on"
+                    else -> "Every block counts — data & attention protected"
+                }
+                val gamifyColor = when {
+                    blockedTodayVal > 5000 -> Color(0xFFFF6B35)
+                    blockedTodayVal > 1500 -> Color(0xFFFFD700)
+                    blockedTodayVal > 400 -> Color(0xFFC0C0C0)
+                    else -> ClearColors.green
+                }
+                Spacer(Modifier.height(10.dp))
+                // Badge chip
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(gamifyColor.copy(alpha = 0.10f))
+                        .border(
+                            width = 1.dp,
+                            color = gamifyColor.copy(alpha = 0.25f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "$gamifyIcon  $gamifyLabel",
+                        fontSize = 11.sp,
+                        color = gamifyColor,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Quick access hint for Screenshot Scanner (part of Indian Scam Shield)
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(ClearColors.blue.copy(alpha = 0.08f))
+                        .border(
+                            width = 1.dp,
+                            color = ClearColors.blue.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        "📸  Privacy tab → Scanner to check suspicious screenshots",
+                        fontSize = 11.sp,
+                        color = ClearColors.blue.copy(alpha = 0.85f)
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun ModePill(
+    modeId: String,
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onSelect: () -> Unit
+) {
+    // Animated scale bounce on selection
+    val pillScale by animateFloatAsState(
+        targetValue = if (selected) ClearDesign.pillSelectedScale else 1f,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 400f),
+        label = "pillScale"
+    )
+    val pillBg by animateColorAsState(
+        targetValue = if (selected) ClearColors.green.copy(alpha = 0.18f) else ClearColors.bg.copy(alpha = 0.2f),
+        animationSpec = tween(220),
+        label = "pillBg"
+    )
+    val pillBorder by animateColorAsState(
+        targetValue = if (selected) ClearColors.green.copy(alpha = 0.38f) else ClearColors.border.copy(alpha = 0.12f),
+        animationSpec = tween(220),
+        label = "pillBorder"
+    )
+
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .height(58.dp)
+            .graphicsLayer {
+                scaleX = pillScale
+                scaleY = pillScale
+            }
+            .clip(RoundedCornerShape(12.dp))
+            .background(pillBg)
+            .border(
+                width = 1.dp,
+                color = pillBorder,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onSelect()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = label, tint = if (selected) ClearColors.green else ClearColors.muted, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.height(1.dp))
+            Text(
+                text = label.replace(" Mode", "").replace(" (Safe Search)", ""),
+                fontSize = 9.sp,
+                color = if (selected) ClearColors.green else ClearColors.text,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -400,9 +551,28 @@ private fun StatusRow(label: String, value: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 5.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, color = ClearColors.muted, fontSize = 13.sp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Status indicator dot
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(
+                        when {
+                            value.startsWith("Active") || value.startsWith("On") || value.startsWith("DoH") || value.startsWith("Auto") || value.startsWith("Block") || value.startsWith("Maximum") || value.startsWith("Satvik") || value.startsWith("Focus") || value.startsWith("Deal") -> ClearColors.success
+                            value == "None" || value == "Paused" || value == "Off" || value.startsWith("Manual") || value.startsWith("Classic") -> ClearColors.muted
+                            else -> ClearColors.blue
+                        }
+                    )
+            )
+            Text(label, color = ClearColors.muted, fontSize = 13.sp)
+        }
         Text(value, color = ClearColors.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }

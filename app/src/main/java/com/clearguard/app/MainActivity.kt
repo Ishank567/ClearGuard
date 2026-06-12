@@ -18,6 +18,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -45,6 +47,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,8 +58,10 @@ import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardHero
 import com.clearguard.app.ui.screens.BlocklistsScreen
 import com.clearguard.app.ui.screens.BrowserScreen
+import com.clearguard.app.ui.screens.EnterpriseScreen
 import com.clearguard.app.ui.screens.DashboardScreen
 import com.clearguard.app.ui.screens.PrivacyScreen
+import com.clearguard.app.ui.screens.OnboardingScreen
 import com.clearguard.app.ui.screens.SettingsScreen
 import com.clearguard.app.ui.theme.ClearColors
 import com.clearguard.app.ui.theme.ClearDesign
@@ -71,7 +77,8 @@ enum class AppScreen(val title: String, val icon: ImageVector) {
     Privacy("Privacy", Icons.Default.VerifiedUser),
     Browser("Browser", Icons.Default.Language),
     Blocklists("Lists", Icons.AutoMirrored.Filled.List),
-    Settings("Settings", Icons.Default.Settings)
+    Settings("Settings", Icons.Default.Settings),
+    Enterprise("Enterprise", Icons.Default.Star)
 }
 
 class MainActivity : ComponentActivity() {
@@ -80,6 +87,24 @@ class MainActivity : ComponentActivity() {
         PreferenceKeys.ensureDefaults(this)
         HostBlocker.get(this).reload()
         BlocklistUpdateWorker.sync(this)
+
+        // Initialize on-device rule engine + TFLite phishing classifier (lightweight, safe to call early)
+        com.clearguard.app.security.PhishingClassifier.initialize(this)
+
+        // Load real small FRI risk DB from assets + auto-seed (for Mobile Number Risk Scoring API)
+        com.clearguard.app.security.OnDeviceRuleEngine.loadLocalFRIDB(this)
+
+        // RASP + Anti-tamper check (stub for high-complexity feature)
+        if (com.clearguard.app.PreferenceKeys.prefs(this).getBoolean(
+                com.clearguard.app.PreferenceKeys.KEY_RASP_ENABLED,
+                com.clearguard.app.PreferenceKeys.DEFAULT_RASP_ENABLED
+            )) {
+            val raspReport = com.clearguard.app.security.RaspGuard.checkIntegrity(this)
+            com.clearguard.app.security.RaspGuard.logReport(raspReport)
+            if (raspReport.score > 60) {
+                // In production: show warning or exit. For now log.
+            }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -118,6 +143,23 @@ fun ClearGuardApp(
 ) {
     val context = LocalContext.current
 
+    var showOnboarding by remember {
+        mutableStateOf(
+            !PreferenceKeys.prefs(context)
+                .getBoolean(PreferenceKeys.KEY_ONBOARDING_SEEN, false)
+        )
+    }
+
+    if (showOnboarding) {
+        OnboardingScreen(onComplete = {
+            PreferenceKeys.prefs(context).edit()
+                .putBoolean(PreferenceKeys.KEY_ONBOARDING_SEEN, true)
+                .apply()
+            showOnboarding = false
+        })
+        return
+    }
+
     var currentScreen by remember { mutableStateOf(AppScreen.Dashboard) }
 
     // Real state synced with the VPN service + live updates via broadcast
@@ -130,6 +172,7 @@ fun ClearGuardApp(
     val scamBlockedState = remember { mutableStateOf(loadScamBlocked(context)) }
     val scamBlockedTodayState = remember { mutableStateOf(loadScamBlockedToday(context)) }
     val scamShieldEnabledState = remember { mutableStateOf(loadScamShieldEnabled(context)) }
+    val indianScamShieldEnabledState = remember { mutableStateOf(loadIndianScamShieldEnabled(context)) }
     val upstreamQueryState = remember { mutableStateOf(loadUpstreamQueries(context)) }
     val upstreamLatencyState = remember { mutableStateOf(loadUpstreamAverageLatency(context)) }
     val dohEnabledState = remember { mutableStateOf(loadDohEnabled(context)) }
@@ -148,6 +191,7 @@ fun ClearGuardApp(
                     scamBlockedState.value = loadScamBlocked(context)
                     scamBlockedTodayState.value = loadScamBlockedToday(context)
                     scamShieldEnabledState.value = loadScamShieldEnabled(context)
+                    indianScamShieldEnabledState.value = loadIndianScamShieldEnabled(context)
                     upstreamQueryState.value = loadUpstreamQueries(context)
                     upstreamLatencyState.value = loadUpstreamAverageLatency(context)
                     dohEnabledState.value = loadDohEnabled(context)
@@ -209,6 +253,7 @@ fun ClearGuardApp(
             scamBlockedState.value = loadScamBlocked(context)
             scamBlockedTodayState.value = loadScamBlockedToday(context)
             scamShieldEnabledState.value = loadScamShieldEnabled(context)
+            indianScamShieldEnabledState.value = loadIndianScamShieldEnabled(context)
             upstreamQueryState.value = loadUpstreamQueries(context)
             upstreamLatencyState.value = loadUpstreamAverageLatency(context)
             dohEnabledState.value = loadDohEnabled(context)
@@ -241,13 +286,15 @@ fun ClearGuardApp(
                     .padding(innerPadding)
             ) {
             // Glassy top header
-            GlassHeader(currentScreen.title, isProtected)
+            GlassHeader(currentScreen.title, isProtected, blockedTodayState.value.toInt())
 
             AnimatedContent(
                 targetState = currentScreen,
                 transitionSpec = {
-                    fadeIn(tween(ClearDesign.screenFadeInMs)) togetherWith
-                        fadeOut(tween(ClearDesign.screenFadeOutMs))
+                    (fadeIn(tween(ClearDesign.screenFadeInMs)) +
+                        slideInVertically(tween(ClearDesign.screenFadeInMs)) { it / 16 }) togetherWith
+                        (fadeOut(tween(ClearDesign.screenFadeOutMs)) +
+                            slideOutVertically(tween(ClearDesign.screenFadeOutMs)) { -it / 16 })
                 },
                 modifier = Modifier.weight(1f)
             ) { screen ->
@@ -277,6 +324,7 @@ fun ClearGuardApp(
                     )
                     AppScreen.Browser -> BrowserScreen()
                     AppScreen.Blocklists -> BlocklistsScreen()
+                    AppScreen.Enterprise -> EnterpriseScreen()
                     AppScreen.Settings -> SettingsScreen(
                         isProtected = isProtected,
                         onProtectionChange = toggleProtection,
@@ -286,6 +334,15 @@ fun ClearGuardApp(
                                 .putBoolean(PreferenceKeys.KEY_SCAM_SHIELD_ENABLED, enabled)
                                 .apply()
                             scamShieldEnabledState.value = enabled
+                        },
+                        indianScamShieldEnabled = indianScamShieldEnabledState.value,
+                        onIndianScamShieldChange = { enabled ->
+                            PreferenceKeys.prefs(context).edit()
+                                .putBoolean(PreferenceKeys.KEY_INDIAN_SCAM_SHIELD_ENABLED, enabled)
+                                .apply()
+                            indianScamShieldEnabledState.value = enabled
+                            // Reload so the dedicated patterns take effect immediately
+                            com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(context)
                         },
                         dohEnabled = dohEnabledState.value,
                         onDohEnabledChange = { enabled ->
@@ -344,6 +401,14 @@ private fun loadScamShieldEnabled(context: android.content.Context): Boolean {
     )
 }
 
+private fun loadIndianScamShieldEnabled(context: android.content.Context): Boolean {
+    val prefs: SharedPreferences = PreferenceKeys.prefs(context)
+    return prefs.getBoolean(
+        PreferenceKeys.KEY_INDIAN_SCAM_SHIELD_ENABLED,
+        PreferenceKeys.DEFAULT_INDIAN_SCAM_SHIELD_ENABLED
+    )
+}
+
 private fun loadUpstreamQueries(context: android.content.Context): Long {
     val prefs: SharedPreferences = PreferenceKeys.prefs(context)
     return prefs.getLong(PreferenceKeys.KEY_UPSTREAM_QUERY_COUNT, 0L)
@@ -376,11 +441,11 @@ private fun loadActiveRules(context: android.content.Context): Int {
 }
 
 @Composable
-fun GlassHeader(title: String, isProtected: Boolean) {
+fun GlassHeader(title: String, isProtected: Boolean, blockedToday: Int = 0) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = ClearDesign.screenHPadding, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -448,6 +513,23 @@ fun GlassHeader(title: String, isProtected: Boolean) {
                     fontWeight = FontWeight.Medium,
                     color = ClearColors.text
                 )
+                // Live blocked counter
+                if (isProtected && blockedToday > 0) {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 2.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ClearColors.green.copy(alpha = 0.12f))
+                            .padding(horizontal = 6.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = "🛡️ $blockedToday",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ClearColors.green
+                        )
+                    }
+                }
             }
         }
     }
@@ -468,6 +550,7 @@ fun GlassBottomNavigation(
         elevation = ClearDesign.navElevation
     ) {
         val selectedIndex = AppScreen.entries.indexOf(currentScreen)
+        val haptic = LocalHapticFeedback.current
 
         BoxWithConstraints(
             modifier = Modifier
@@ -526,7 +609,10 @@ fun GlassBottomNavigation(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) { onScreenSelected(screen) },
+                            ) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LightClick)
+                                onScreenSelected(screen)
+                            },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -542,12 +628,25 @@ fun GlassBottomNavigation(
                                 }
                         )
                         Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = screen.title,
-                            fontSize = 11.sp,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (selected) ClearColors.green else ClearColors.muted
-                        )
+                        Box {
+                            Text(
+                                text = screen.title,
+                                fontSize = 11.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (selected) ClearColors.green else ClearColors.muted
+                            )
+                            // Live activity dot on Privacy tab when VPN active
+                            if (screen == AppScreen.Privacy && com.clearguard.app.vpn.ClearGuardVpnService.isRunning()) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(5.dp)
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 3.dp, y = (-1).dp)
+                                        .clip(CircleShape)
+                                        .background(ClearColors.green)
+                                )
+                            }
+                        }
                     }
                 }
             }

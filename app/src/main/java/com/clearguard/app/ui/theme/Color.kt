@@ -65,24 +65,28 @@ object ClearPalettes {
         useGlass = true
     )
 
-    /** Red & Black theme with no glass and glowing crimson/red auras. */
+    /**
+     * Modern dark theme — warm dark navy surfaces with frosted glassmorphism.
+     * Inspired by Linear, Arc, Vercel, and iOS 26 liquid glass aesthetics.
+     * Uses teal/cyan accents unified with the light theme for brand consistency.
+     */
     val dark = ClearPalette(
-        bg = Color(0xFF000000),
-        panel = Color(0xFF0C0707),
-        text = Color(0xFFFFFFFF),
-        muted = Color(0xFF8C8282),
-        green = Color(0xFFFF3333),
-        blue = Color(0xFFFF5555),
-        border = Color(0xFF281010),
-        glass = Color(0xFF0C0707),
-        glassBorder = Color(0xFFFF2222).copy(alpha = 0.28f),
-        glassHighlight = Color.Transparent,
-        glassShadow = Color(0xFFFF0000).copy(alpha = 0.35f),
-        success = Color(0xFFFF3333),
-        danger = Color(0xFFFF3333),
-        warning = Color(0xFFFF8800),
-        glassDark = Color(0xFF050303),
-        useGlass = false
+        bg = Color(0xFF0C0F14),
+        panel = Color(0xFF141820),
+        text = Color(0xFFE8ECF4),
+        muted = Color(0xFF6B7A8D),
+        green = Color(0xFF2DD4BF),
+        blue = Color(0xFF38BDF8),
+        border = Color(0xFF1E2736),
+        glass = Color(0xFFFFFFFF).copy(alpha = 0.08f),
+        glassBorder = Color.White.copy(alpha = 0.12f),
+        glassHighlight = Color.White.copy(alpha = 0.06f),
+        glassShadow = Color(0xFF000000).copy(alpha = 0.40f),
+        success = Color(0xFF34D399),
+        danger = Color(0xFFF43F5E),
+        warning = Color(0xFFFBBF24),
+        glassDark = Color(0xFF0A0D12).copy(alpha = 0.85f),
+        useGlass = true
     )
 }
 
