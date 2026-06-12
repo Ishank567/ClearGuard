@@ -46,6 +46,26 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
+import kotlin.math.cos
+import kotlin.math.sin
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -58,7 +78,6 @@ import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardHero
 import com.clearguard.app.ui.screens.BlocklistsScreen
 import com.clearguard.app.ui.screens.BrowserScreen
-import com.clearguard.app.ui.screens.EnterpriseScreen
 import com.clearguard.app.ui.screens.DashboardScreen
 import com.clearguard.app.ui.screens.PrivacyScreen
 import com.clearguard.app.ui.screens.OnboardingScreen
@@ -77,8 +96,7 @@ enum class AppScreen(val title: String, val icon: ImageVector) {
     Privacy("Privacy", Icons.Default.VerifiedUser),
     Browser("Browser", Icons.Default.Language),
     Blocklists("Lists", Icons.AutoMirrored.Filled.List),
-    Settings("Settings", Icons.Default.Settings),
-    Enterprise("Enterprise", Icons.Default.Star)
+    Settings("Settings", Icons.Default.Settings)
 }
 
 class MainActivity : ComponentActivity() {
@@ -160,7 +178,16 @@ fun ClearGuardApp(
         return
     }
 
+    // 3D Splash: beautiful modern launch animation (runs briefly on every open for brand impact)
+    if (show3DSplash) {
+        ThreeDSplash(onFinished = { show3DSplash = false })
+        return
+    }
+
     var currentScreen by remember { mutableStateOf(AppScreen.Dashboard) }
+
+    // Modern 3D splash for premium launch experience
+    var show3DSplash by remember { mutableStateOf(true) }
 
     // Real state synced with the VPN service + live updates via broadcast
     var isProtected by remember { mutableStateOf(ClearGuardVpnService.isRunning()) }
@@ -324,7 +351,6 @@ fun ClearGuardApp(
                     )
                     AppScreen.Browser -> BrowserScreen()
                     AppScreen.Blocklists -> BlocklistsScreen()
-                    AppScreen.Enterprise -> EnterpriseScreen()
                     AppScreen.Settings -> SettingsScreen(
                         isProtected = isProtected,
                         onProtectionChange = toggleProtection,
@@ -450,15 +476,19 @@ fun GlassHeader(title: String, isProtected: Boolean, blockedToday: Int = 0) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column {
-            Text(
-                text = "ShieldDNS",
-                fontSize = 13.sp,
-                color = ClearColors.muted,
-                fontWeight = FontWeight.Medium
+            // Use the official logo (small version) for strong brand presence in the modern header
+            // The provided logo already includes the wordmark — this gives a clean, professional look
+            Image(
+                painter = painterResource(id = R.drawable.shield_dns_logo),
+                contentDescription = "ShieldDNS",
+                modifier = Modifier
+                    .height(22.dp)
+                    .padding(bottom = 2.dp),
+                contentScale = ContentScale.Fit
             )
             Text(
                 text = title,
-                fontSize = 28.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = ClearColors.text
             )
@@ -651,5 +681,212 @@ fun GlassBottomNavigation(
                 }
             }
         }
+    }
+}
+
+/**
+ * Modern 3D Splash Effect - premium, visually striking launch experience.
+ * Uses the official ShieldDNS logo you provided (with full 3D perspective transforms).
+ *
+ * === HOW TO ADD THE LOGO ASSET (IMPORTANT) ===
+ * 1. Save/export the attached logo image.
+ * 2. For best results on the 3D splash + onboarding:
+ *    - Create a high-resolution PNG version of the full logo (including the "ShieldDNS" wordmark).
+ *    - Place it in:
+ *      app/src/main/res/drawable/shield_dns_logo.png   (or .webp for smaller size)
+ *    - For different densities you can provide mdpi/hdpi/xhdpi/xxhdpi/xxxhdpi versions in the corresponding drawable-* folders.
+ * 3. (Optional but recommended for launcher icon):
+ *    - Crop/export just the shield graphic (no bottom text) as a square-ish foreground.
+ *    - Replace or update res/drawable/ic_launcher_foreground.xml (or switch the adaptive icon to use PNGs in mipmap-*).
+ * 4. After adding the file, rebuild. The splash, header, and onboarding will automatically pick it up with beautiful 3D rotation/perspective.
+ *
+ * The 3D transforms (rotationY, rotationX, cameraDistance) applied to the logo will give exactly the modern 3D splash effect you asked for.
+ */
+@Composable
+fun ThreeDSplash(onFinished: () -> Unit) {
+    val infinite = rememberInfiniteTransition(label = "splash3d")
+    
+    // Continuous 3D rotation for the shield (primary "wow" effect)
+    val rotY by infinite.animateFloat(
+        initialValue = -22f, targetValue = 22f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "rotY"
+    )
+    val rotX by infinite.animateFloat(
+        initialValue = -8f, targetValue = 14f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(5100, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "rotX"
+    )
+    
+    // Subtle breathing scale + extra spin layer for 3D volume
+    val breath by infinite.animateFloat(
+        initialValue = 0.96f, targetValue = 1.065f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1850, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breath"
+    )
+    
+    // Orbiting accent particles around the 3D object (depth layers)
+    val orbit by infinite.animateFloat(
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(6200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "orbit"
+    )
+    
+    // Entrance animation
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        entered = true
+        delay(1850)
+        onFinished()
+    }
+    
+    val entranceScale by animateFloatAsState(
+        targetValue = if (entered) 1f else 0.65f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 180f),
+        label = "splashEntranceScale"
+    )
+    val entranceAlpha by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(620),
+        label = "splashEntranceAlpha"
+    )
+    val entranceRot by animateFloatAsState(
+        targetValue = if (entered) 0f else -38f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = 140f),
+        label = "splashRot"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ClearColors.bg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onFinished() },
+        contentAlignment = Alignment.Center
+    ) {
+        // Reuse and enhance the beautiful animated mesh as the deep 3D environment
+        ClearMeshBackground(darkTheme = isSystemInDarkTheme())
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .graphicsLayer {
+                    alpha = entranceAlpha
+                    scaleX = entranceScale
+                    scaleY = entranceScale
+                    rotationZ = entranceRot * 0.3f
+                }
+        ) {
+            // === THE STAR: True 3D Rotating Logo with depth (using your provided ShieldDNS logo) ===
+            // Place the attached logo image in res/drawable as shield_dns_logo.png (or .xml vector)
+            // Recommended: export the shield+text at 2-3x for crispness, or convert the shield graphic to vector.
+            Box(
+                modifier = Modifier
+                    .size(200.dp)   // a bit larger to show the full logo including wordmark nicely under 3D transform
+                    .graphicsLayer {
+                        // Core 3D perspective transform — this gives the premium "3D splash effect"
+                        rotationY = rotY
+                        rotationX = rotX + (sin(orbit / 57f) * 5f)
+                        cameraDistance = 10.5f   // pronounced 3D pop
+                        scaleX = breath * 1.02f
+                        scaleY = breath * 1.02f
+                        // subtle perspective shear for extra depth
+                        shadowElevation = 12f
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                // The official logo with full 3D treatment
+                Image(
+                    painter = painterResource(id = R.drawable.shield_dns_logo),
+                    contentDescription = "ShieldDNS Logo",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            // extra micro-tilt on the image itself for volume
+                            rotationZ = sin(rotY / 90f) * 1.5f
+                        },
+                    contentScale = ContentScale.Fit
+                )
+
+                // Optional subtle glow / rim overlay to enhance the 3D glass feel on top of your logo art
+                // (remove or tweak alpha if it conflicts with the provided artwork)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.12f),
+                                    Color.Transparent,
+                                    ClearColors.blue.copy(alpha = 0.06f)
+                                ),
+                                radius = 280f
+                            )
+                        )
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Tagline only — the official logo image above already includes the beautiful "ShieldDNS" wordmark
+            Text(
+                text = "PROTECTED • PRIVATE • POWERFUL",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = ClearColors.muted,
+                letterSpacing = 2.8.sp,
+                modifier = Modifier
+                    .graphicsLayer { alpha = 0.85f }
+            )
+        }
+
+        // Orbiting 3D accent particles (adds motion and depth around the central 3D object)
+        Canvas(
+            modifier = Modifier
+                .size(260.dp)
+                .graphicsLayer { alpha = 0.7f }
+        ) {
+            val cx = size.width / 2
+            val cy = size.height / 2 - 28f
+            val r = 94f
+
+            for (i in 0 until 5) {
+                val angle = orbit + (i * 72f)
+                val rad = Math.toRadians(angle.toDouble())
+                val px = cx + (r * cos(rad)).toFloat()
+                val py = cy + (r * sin(rad) * 0.45f)   // squash for 3D ellipse orbit
+
+                drawCircle(
+                    color = if (i % 2 == 0) ClearColors.green.copy(alpha = 0.55f) else ClearColors.blue.copy(alpha = 0.4f),
+                    radius = if (i == 0) 4.5f else 2.8f,
+                    center = Offset(px, py)
+                )
+            }
+        }
+
+        // Bottom subtle tagline
+        Text(
+            text = "India-first privacy & scam shield",
+            fontSize = 11.sp,
+            color = ClearColors.muted.copy(alpha = 0.65f),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 52.dp)
+        )
     }
 }

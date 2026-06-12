@@ -197,56 +197,73 @@ object OnDeviceRuleEngine {
     fun ensureFRIDBLoaded(context: Context) = loadLocalFRIDB(context)
 
     fun addToLocalRiskDB(numberOrPrefix: String) {
-        LOCAL_FRI_BAD_PATTERNS.add(numberOrPrefix.replace("[^0-9]".toRegex(), ""))
+        val norm = normalizePhone(numberOrPrefix)
+        if (norm.isNotEmpty()) LOCAL_FRI_BAD_PATTERNS.add(norm)
     }
 
-    /** For UI / auto-suggest: return current high-risk numbers/prefixes from the local FRI DB + Edge fabric. */
+    /** Returns current high-risk numbers/prefixes from the local FRI DB + Edge threat signals. */
     fun getHighRiskPhones(limit: Int = 20): List<String> {
-        val combined = (LOCAL_FRI_BAD_PATTERNS + EDGE_THREAT_SIGNALS).sorted()
-        return combined.take(limit)
+        val combined = (LOCAL_FRI_BAD_PATTERNS + EDGE_THREAT_SIGNALS).toMutableSet()
+        return combined.sorted().take(limit)
     }
 
     /** Add to Edge Threat fabric cache (e.g., from federated reports or partners). Feeds risk scoring. */
     fun addToEdgeThreatSignal(signal: String) {
-        EDGE_THREAT_SIGNALS.add(signal.replace("[^0-9]".toRegex(), ""))
+        val norm = normalizePhone(signal)
+        if (norm.isNotEmpty()) EDGE_THREAT_SIGNALS.add(norm)
     }
 
     fun phoneRiskScore(phone: String, contextText: String = ""): Int {
         var risk = 0
-        val cleanPhone = phone.replace("[^0-9]".toRegex(), "").takeLast(10) // normalize to last 10 digits
+        val cleanPhone = normalizePhone(phone)
         val combined = (phone + " " + contextText).lowercase()
+        val ctxLower = contextText.lowercase()
 
-        // Prefix based (toll free / premium often used in scams)
+        // Prefix based (toll free / premium often used in scams) - enhanced
         if (HIGH_RISK_PHONE_PREFIXES.any { cleanPhone.startsWith(it) || cleanPhone.endsWith(it.takeLast(4)) }) {
-            risk += 35
+            risk += 38
         }
 
         // Context from known high-risk senders (banks, UPI, gov, courier as per table)
         for (pat in HIGH_RISK_CONTEXT_PATTERNS) {
             if (pat.containsMatchIn(combined)) {
-                risk += 30
+                risk += 32
                 break
             }
         }
 
         // Local FRI risk DB check
         if (LOCAL_FRI_BAD_PATTERNS.any { cleanPhone.contains(it.takeLast(10)) || combined.contains(it) }) {
-            risk += 45
+            risk += 48
         }
 
         // Edge Threat fabric signals (shared cache feeding risk API)
         if (EDGE_THREAT_SIGNALS.any { cleanPhone.contains(it.takeLast(10)) || combined.contains(it) }) {
-            risk += 30
+            risk += 32
         }
 
         // Additional heuristics
-        if (cleanPhone.length == 10 && cleanPhone[0] in '6'..'9' && combined.containsAny(listOf("bank", "upi", "refund", "kyc", "support", "verify"))) {
-            risk += 25
+        if (cleanPhone.length == 10 && cleanPhone[0] in '6'..'9' && combined.containsAny(listOf("bank", "upi", "refund", "kyc", "support", "verify", "care", "helpline"))) {
+            risk += 28
         }
-        if (combined.contains("fraud") || combined.contains("scam") || combined.contains("fake")) risk += 15
+        if (combined.contains("fraud") || combined.contains("scam") || combined.contains("fake")) risk += 18
 
         // Very new or sequential numbers often risky
-        if (cleanPhone.matches(Regex("^[6-9](\\d)\\1{4,}\\d*$"))) risk += 20
+        if (cleanPhone.matches(Regex("^[6-9](\\d)\\1{4,}\\d*$"))) risk += 22
+
+        // Context boosts for phone numbers seen with scam language
+        if (ctxLower.contains("upi://pay") || ctxLower.contains("paytm") || ctxLower.contains("phonepe") || ctxLower.contains("gpay")) {
+            risk += 25
+        }
+        if ((ctxLower.contains("otp") || ctxLower.contains("one time") || ctxLower.contains("verification code")) && risk > 20) {
+            risk += 30
+        }
+        if (ctxLower.containsAny(listOf("kyc", "suspended", "blocked", "refund", "claim", "due", "verify now", "update now"))) {
+            risk += 20
+        }
+        if (cleanPhone.startsWith("1800") || cleanPhone.startsWith("1860") || cleanPhone.startsWith("140")) {
+            risk = maxOf(risk, 70)
+        }
 
         return risk.coerceIn(0, 100)
     }
@@ -257,8 +274,18 @@ object OnDeviceRuleEngine {
 
     private fun String.containsAny(list: List<String>) = list.any { this.contains(it) }
 
+    /** Centralized normalizer for phone numbers: strips non-digits, normalizes +91/0 prefixes, keeps last 10 digits. Used everywhere for consistency. */
+    fun normalizePhone(phone: String?): String {
+        if (phone.isNullOrBlank()) return ""
+        var d = phone.replace(Regex("[^0-9]"), "")
+        if (d.startsWith("91") && d.length > 10) d = d.substring(2)
+        if (d.startsWith("0") && d.length > 10) d = d.substring(1)
+        if (d.length > 10) d = d.takeLast(10)
+        return d
+    }
+
     // === Mobile Number Risk Scoring API (FRI + operator signals) ===
-    // Enterprise-grade API facade for "Block/vet high-risk numbers at scale".
+    // Advanced API facade for "Block/vet high-risk numbers at scale".
     // - Fast local path (always available, zero-latency, privacy-first).
     // - Optional remote operator/FRI signals (stub for DoT FRI / telco APIs).
     // - Supports batch for scale.
@@ -271,7 +298,7 @@ object OnDeviceRuleEngine {
             .readTimeout(10, TimeUnit.SECONDS)
             .build()
 
-        // Configurable remote endpoint (set via prefs or setter for enterprise).
+        // Configurable remote endpoint (set via prefs or setter).
         // In production: https://api.dot.gov.in/fri or telco partner gateway.
         // Requires API key / mTLS / OAuth. Here we use a configurable stub + local fallback.
         private var FRI_REMOTE_BASE = com.clearguard.app.PreferenceKeys.DEFAULT_FRI_REMOTE_ENDPOINT
@@ -301,7 +328,7 @@ object OnDeviceRuleEngine {
             ) // advanced toggle, default off for privacy
 
             if (useRemote) {
-                // Configurable endpoint from prefs (enterprise config).
+                // Configurable endpoint from prefs.
                 val configuredEndpoint = prefs.getString(PreferenceKeys.KEY_FRI_REMOTE_ENDPOINT, PreferenceKeys.DEFAULT_FRI_REMOTE_ENDPOINT)
                 if (configuredEndpoint != null) setRemoteEndpoint(configuredEndpoint)
                 try {
@@ -349,7 +376,7 @@ object OnDeviceRuleEngine {
             val clean = phone.replace("[^0-9]".toRegex(), "").takeLast(10)
             if (clean.length != 10) return null
 
-            // Get configurable endpoint (for prod, set via enterprise config)
+            // Get configurable endpoint (for prod, set via prefs)
             // For now, use default or from prefs if available (passed via context in callers)
             val endpoint = try {
                 // Note: in non-Context calls, falls back. Callers with Context should pass/update.
@@ -377,7 +404,7 @@ object OnDeviceRuleEngine {
             val url = endpoint
             val jsonBody = JSONObject().apply {
                 put("number_hash", hmac)
-                put("client", "ShieldDNS-Enterprise")
+                put("client", "ShieldDNS")
                 put("version", "1.0")
                 put("timestamp", System.currentTimeMillis())
             }.toString()
@@ -387,7 +414,7 @@ object OnDeviceRuleEngine {
                     .url(url)
                     .post(jsonBody.toRequestBody("application/json".toMediaType()))
                     .header("Authorization", "Bearer ${getApiKeyOrStub()}")
-                    .header("X-Client", "ShieldDNS-Enterprise")
+                    .header("X-Client", "ShieldDNS")
                     .header("X-Request-ID", java.util.UUID.randomUUID().toString()) // for tracing
                     .build()
 
@@ -414,7 +441,7 @@ object OnDeviceRuleEngine {
 
         /**
          * Utility to "vet and block" at scale: given a list of numbers (e.g. from logs or CRM), return only the high-risk ones with recommendations.
-         * Useful for enterprise bulk processing.
+         * Useful for bulk processing / vetting lists at scale.
          */
         suspend fun vetAndRecommendActions(
             context: Context,
@@ -424,7 +451,7 @@ object OnDeviceRuleEngine {
         }
 
         private fun getApiKeyOrStub(): String {
-            // In real: from secure storage (see Hardware-backed Key Management in enterprise table).
+            // In real: from secure storage (see Hardware-backed Key Management).
             // For demo: return a placeholder. Production must use encrypted prefs or KeyStore.
             return "demo_fri_key_replace_in_prod"
         }
@@ -438,38 +465,6 @@ object OnDeviceRuleEngine {
         val recommendedAction: String,
         val explanation: String
     )
-
-    /**
-     * Helper for realtime: show high priority notification for high risk phone.
-     * Uses a dedicated channel. Call from receivers/services.
-     */
-    fun showHighRiskPhoneNotification(context: Context, phone: String, result: RiskResult, extraInfo: String = "") {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val channel = android.app.NotificationChannel(
-                "high_risk_phone_channel",
-                "High Risk Phones (FRI)",
-                android.app.NotificationManager.IMPORTANCE_HIGH
-            )
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        val title = "High Risk Phone (FRI Risk: ${result.score})"
-        val text = "From: $phone - ${result.explanation}"
-        val bigText = "Phone: $phone\n\n${result.explanation}\nSignals: ${result.signals.joinToString()}\nAction: ${result.recommendedAction}\n$extraInfo"
-
-        val notification = android.app.Notification.Builder(context, "high_risk_phone_channel")
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(android.app.Notification.BigTextStyle().bigText(bigText))
-            .setPriority(android.app.Notification.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .build()
-
-        notificationManager.notify(phone.hashCode(), notification)
-    }
 
     // === UPI Payee Verification (parse + risk) ===
     // Parses upi://pay?pa=...&pn=PayeeName&am=... etc.
@@ -500,7 +495,7 @@ object OnDeviceRuleEngine {
     }
 
     // === Banking Gateway Integration (NPCI/Bank APIs) stub ===
-    // For real-time payee verification and transaction blocking (second in enterprise table).
+    // For real-time payee verification and transaction blocking (Banking/UPI).
     // Stub for NPCI UPI APIs, bank verification endpoints. In prod: authenticated calls to NPCI/BHIM/bank gateways.
     // On-device: uses existing UPI parser + risk + local "verified payee" DB stub.
     // "Transaction blocking": return risk + "block" recommendation; app can delay/warn in browser or scanner.

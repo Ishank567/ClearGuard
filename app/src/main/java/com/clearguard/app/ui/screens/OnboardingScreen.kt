@@ -64,6 +64,10 @@ import com.clearguard.app.ui.theme.ClearMeshBackground
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
 
 // ────────────────────────────────────────────────────────────────────────────
 // Data
@@ -79,7 +83,8 @@ private data class OnboardingPage(
 
 private val pages = listOf(
     OnboardingPage(
-        icon = Icons.Default.Shield,
+        // Using the official new logo for strong first impression
+        icon = null,  // we'll render the real logo image instead of the simple Shield vector
         title = "Welcome to ShieldDNS",
         subtitle = "Your Shield. Your Rules.",
         description = "Your DNS-level firewall for a cleaner, safer internet. Block ads, trackers, and threats before they ever reach your device.",
@@ -402,13 +407,28 @@ private fun OnboardingPageContent(
                                 )
                             )
                     )
-                    // Icon
-                    Icon(
-                        imageVector = page.icon,
-                        contentDescription = page.title,
-                        modifier = Modifier.size(56.dp),
-                        tint = accent
-                    )
+                    // Use the official new ShieldDNS logo (the image you provided) on the welcome page.
+                    // It receives a gentle 3D tilt animation to match the splash and modern UI direction.
+                    if (page.icon == null) {
+                        Image(
+                            painter = painterResource(id = R.drawable.shield_dns_logo),
+                            contentDescription = page.title,
+                            modifier = Modifier
+                                .height(92.dp)
+                                .graphicsLayer {
+                                    // subtle 3D-ish tilt on the logo in onboarding for visual appeal
+                                    rotationY = floatOffset * 0.08f
+                                },
+                            contentScale = ContentScale.Fit
+                        )
+                    } else {
+                        Icon(
+                            imageVector = page.icon,
+                            contentDescription = page.title,
+                            modifier = Modifier.size(56.dp),
+                            tint = accent
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(28.dp))

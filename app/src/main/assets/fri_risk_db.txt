@@ -28,3 +28,9 @@
 # Electricity / bill help scams
 918888999000
 917654321098
+
+# Enhanced seeds (common patterns for Indian bank/courier/gov support abuse)
+1600
+1400
+919900112233
+917788990011

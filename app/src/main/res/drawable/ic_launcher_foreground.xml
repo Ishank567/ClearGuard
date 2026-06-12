@@ -4,6 +4,14 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- 
+      OFFICIAL LOGO UPDATE: 
+      Use the ShieldDNS logo image you attached (the shield + network graphic).
+      For the launcher icon (adaptive), export ONLY the shield portion (no bottom text) 
+      as PNGs into the mipmap-* folders and update ic_launcher.xml to reference them,
+      or convert the shield part to vector and replace the paths below.
+      This vector is the previous placeholder.
+    -->
 
     <!-- Outer soft teal glow / ambient halo -->
     <path

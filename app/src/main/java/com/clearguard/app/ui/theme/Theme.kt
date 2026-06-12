@@ -165,7 +165,62 @@ fun ClearMeshBackground(darkTheme: Boolean) {
         // Draw deep base background color
         drawRect(color = ClearColors.bg)
 
-        // Draw blurry soft mesh neon gradients
+        // === Futuristic cyber 3D depth matching reference: hex grid + particles + network lines ===
+        if (darkTheme) {
+            val hexColor = Color(0xFF0EA5E9).copy(alpha = 0.06f) // cyan-ish like reference
+            val particleColor = ClearColors.green.copy(alpha = 0.12f)
+
+            // Subtle glowing hexagons (futuristic tech feel)
+            for (hx in 0 until 5) {
+                for (hy in 0 until 4) {
+                    val hxPos = w * (0.1f + hx * 0.2f + (if (hy % 2 == 0) 0.1f else 0f))
+                    val hyPos = h * (0.15f + hy * 0.22f)
+                    val hexSize = 38f + (hx + hy) % 3 * 6f
+
+                    // Simple hexagon using 6 lines
+                    val points = (0 until 6).map { i ->
+                        val ang = (i * 60f - 30f) * (Math.PI / 180f)
+                        Offset(
+                            (hxPos + hexSize * cos(ang)).toFloat(),
+                            (hyPos + hexSize * sin(ang) * 0.9f).toFloat()
+                        )
+                    }
+                    for (i in 0 until 6) {
+                        val p1 = points[i]
+                        val p2 = points[(i + 1) % 6]
+                        drawLine(color = hexColor, start = p1, end = p2, strokeWidth = 1.2f)
+                    }
+                }
+            }
+
+            // Extra small glowing particles / nodes (like the reference background)
+            val particleCount = 18
+            for (i in 0 until particleCount) {
+                val px = w * ((i * 0.37f + (i % 5) * 0.11f) % 1f)
+                val py = h * (0.1f + (i * 0.19f) % 0.75f)
+                val pr = 1.5f + (i % 3) * 0.8f
+                drawCircle(color = particleColor, radius = pr, center = Offset(px, py))
+                // faint connection hint
+                if (i % 3 == 0) {
+                    drawCircle(color = ClearColors.blue.copy(alpha = 0.05f), radius = pr * 2.8f, center = Offset(px, py))
+                }
+            }
+        }
+
+        // Keep the perspective grid as subtle structural lines
+        val gridAlpha = if (darkTheme) 0.028f else 0.018f
+        val gridColor = if (darkTheme) ClearColors.green else ClearColors.blue
+        
+        for (i in 1..7) {
+            val progress = i / 7f
+            val y = h * (0.22f + progress * 0.58f)
+            val perspectiveScale = 0.3f + progress * 0.7f
+            val leftX = w * (0.5f - 0.42f * perspectiveScale)
+            val rightX = w * (0.5f + 0.42f * perspectiveScale)
+            drawLine(color = gridColor.copy(alpha = gridAlpha), start = Offset(leftX, y), end = Offset(rightX, y), strokeWidth = 1f)
+        }
+
+        // Draw blurry soft mesh neon gradients (original beautiful moving orbs)
         if (darkTheme) {
             // Teal ambient glow — primary brand warmth
             drawCircle(

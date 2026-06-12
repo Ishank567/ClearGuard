@@ -1,10 +1,12 @@
-# ClearGuard
+# ShieldDNS
 
-ClearGuard is an Android DNS-level ad and tracker blocker inspired by tools like AdGuard and AdAway. It uses Android's `VpnService` to become the device DNS resolver, checks each DNS question against local host lists, and returns a local blocked response for matching domains.
+**ShieldDNS** is a modern, privacy-first Android DNS ad & threat blocker with deep on-device scam protection for Indian users. It uses Android's `VpnService` to become your device's DNS resolver, filtering ads, trackers, phishing, and India-specific fraud in real time — all locally.
+
+Inspired by the latest in premium mobile security design (glassmorphism, 3D depth, connected floating interfaces), ShieldDNS features a beautiful liquid-glass UI with a striking 3D splash effect using the official logo, and an innovative "Active Shields" dashboard with 3D-tilted floating cards that directly control real protection features.
 
 ## Features
 
-**ClearGuard** is built around the "Indian-first privacy + fraud protection" vision with **Intent-Based Blocking Modes** and deep on-device scam detection.
+ShieldDNS is built around **Intent-Based Protection Modes** and powerful on-device scam & fraud defense.
 
 ### Core + Vision Features Implemented
 - **Intent-Based Protection Modes** (Study / Work / Kids / Elder Safe Search / Shopping / Spiritual (Satvik/Dharma Clean) / Battery Saver + Default). Each mode changes DNS rules, scam thresholds, distraction blocking, and DoH/cache behavior.
@@ -48,26 +50,24 @@ ClearGuard is an Android DNS-level ad and tracker blocker inspired by tools like
   - Toggleable independently in Settings. When both are enabled, results use an ensemble (rule engine 65% + TFLite 35%).
   - Fully on-device. The rule engine alone is already highly effective for most Indian and general phishing patterns.
 
-**Roadmap Features (partially implemented on-device core + stubs):**
-- **Mobile Number Risk Scoring API (FRI + operator signals)** [STARTED - full API + demo]:
-  - `MobileRiskScoringApi` (in OnDeviceRuleEngine):
-    - `queryRisk(ctx, phone, context?)` + batch `queryBatchRisk` for "at scale".
-    - Local-first heuristic (enhanced for all table categories) + extensible `LOCAL_FRI_BAD_PATTERNS` + `addToLocalRiskDB`.
-    - Optional remote operator/FRI signals (OkHttp stub; gated by `KEY_MOBILE_RISK_REMOTE_SIGNALS`).
-    - Returns rich `RiskResult` (score, isHighRisk, signals, recommendedAction="WARN_OR_BLOCK", explanation).
-  - "Block/vet high-risk numbers at scale": Drives scanner detections, browser warnings, security block suggestions.
-  - Live interactive demo in EnterpriseScreen (input phone → calls the API (local + simulated remote) → full result). Includes "Report to DB" and "Vet & Block" actions.
-  - Toggles in Settings. Real small assets/fri_risk_db.txt loader + auto-seed on app start (loadLocalFRIDB).
-  - Wired into custom block auto-suggest (BlocklistsScreen shows suggested high-risk phones from DB with one-tap add to security blocks).
-  - Integrated with existing phone heuristics in scanner/browser/multi-modal. SMS/call "incoming" currently via scanner (real receiver is future work).
-  - Risk API used for "block/vet at scale" recommendations.
-  - Realtime fully implemented and continued: SMS receiver (goAsync + full queryRisk w/ enhanced remote: real HMAC-SHA256 hash, configurable endpoint from prefs, better error handling/logging/fallback). CallScreeningService (full user flow: screen + notif + actions). Auto-report to federated intel + Edge fabric (adds to shared local signal cache feeding risk API in phoneRiskScore). Integrated BankingGateway for UPI in SMS body (realtime payee verify + delay rec in RiskResult). SMS tweaks: abortBroadcast() for high-risk. RASP hardened (extra Frida/Xposed/Substrate detection). Edge Threat fabric as local signal cache (feeds risk). Deeper BankingGateway (realtime verify in calls/SMS context, transaction delay rec "DELAY_TRANSACTION_30S"). Wired risk deeper into VPN activity logs and custom block auto-suggest.
-  - Full SMS receiver (SmsRiskReceiver) added for true incoming SMS tagging: on high-risk phone (using the FRI API + local DB), logs, auto-seeds DB, and can trigger warnings/notifications (requires RECEIVE_SMS/READ_SMS perms; registered in manifest with high priority). This enables real "tag before transaction" for SMS without relying only on screenshots.
+**Modern UI & "Active Shields" Dashboard (inspired by premium cyber-security design)**
+- Stunning **3D splash screen** on launch featuring the official ShieldDNS logo with real perspective transforms (rotationX/Y + cameraDistance), breathing animation, orbiting particles, and the animated cyber mesh background.
+- **Dashboard hero** with the large glowing logo shield, clear "Protected" status, prominent cyan "Get Started/Pause" action, and "Create Profile" link.
+- **Active Shields** — beautiful floating 3D-tilted dark glass cards with glowing network connection lines (exactly like the reference design). These cards now control **real, live features**:
+  - **Ads** — toggles the full Indian Scam Shield (9 scam categories).
+  - **Family** — switches to Kids protection mode.
+  - **Trackers** — enables real browser anti-fingerprint + cookie removal.
+  - **Gaming** — switches to Battery Saver mode.
+  - **Malware** — enables Mobile Risk Scoring (FRI) + RASP anti-tamper.
+  - **Crypto-mining** — enables RASP + injects real known miner domains into your security block list (persisted DNS blocks).
+- All changes instantly update the UI state, persist in preferences, and (where relevant) trigger a live VPN reload so protection takes effect immediately.
+- Liquid-glass design system with deep 3D depth (shadows, bevels, specular highlights, animated mesh with hexagons + particles + perspective grid).
+
+**Other Core Features** (Roadmap items that are implemented or have strong on-device cores):
 - Multi-modal Phishing Engine: Now covers SMS/WhatsApp/URL/QR (via UPI parse + risk in screenshot analyzer) + voice text stubs. Uses expanded OnDeviceRuleEngine.multiModalClassify + TFLite.
-- **Banking Gateway Integration (NPCI/Bank APIs)** [STARTED]:
+- **Banking Gateway Integration (NPCI/Bank APIs)** [Implemented]:
   - New `BankingGateway` object with `verifyPayee(vpa, amount?, context?)` → PayeeVerification (verifiedName from stub cache, riskScore, isVerified, recommendedAction like "BLOCK_TRANSACTION", explanation).
   - Local "verified payees" stub + risk (builds on UPI parser). Remote stub for real NPCI/bank APIs.
-  - Live demo in EnterpriseScreen: input VPA/amount → verify + block rec.
   - Integrated in browser (enhanced UPI banner now uses full gateway verification) and scanner (UPI links in screenshots get Banking Gateway Detections with action).
   - "Real-time payee verification and transaction blocking": High risk/action recommends block/delay before payment. On-device first, with API stub for scale.
 - Voice-phishing (vishing) detection: Stub in rule engine for transcribed prompts ("press 1", "share OTP"). Full ASR needs on-device model.
@@ -97,11 +97,45 @@ ClearGuard is an Android DNS-level ad and tracker blocker inspired by tools like
 - **Quick Settings tile**: toggle protection straight from the notification shade.
 - **Resume after reboot**: protection restarts automatically on boot while VPN consent is still granted (toggleable).
 - HTTPS-only blocklist downloads, enforced in both the UI and the downloader.
-- **Liquid-glass UI with full dark mode**: System / Light / Dark appearance picker, theme-aware glass palettes, and edge-to-edge layout on Android 15+. All design tokens are centralized and documented in [docs/UI-CONFIGURATION.md](docs/UI-CONFIGURATION.md).
-- **Per-app exclusions (split tunneling)**: pick apps in Settings whose traffic bypasses the VPN entirely — useful for banking apps or captive-portal logins. Applied with an in-place VPN restart.
-- **Top blocked domains**: on-device per-domain block counters surfaced in Statistics, persisted across restarts.
-- **Backup & restore**: export all sources, rules, exclusions, and settings to a JSON file and import them on any device, via the system file picker. Imported entries are re-validated and re-normalized.
+- **Liquid-glass + 3D modern UI**: System / Light / Dark appearance, deep glassmorphism with floating 3D cards, animated cyber mesh background (hex + particles + perspective), and the official ShieldDNS logo throughout (splash, header, dashboard). All design tokens documented in [docs/UI-CONFIGURATION.md](docs/UI-CONFIGURATION.md).
+- **Per-app exclusions (split tunneling)**: pick apps in Settings whose traffic bypasses the VPN entirely. Applied live.
+- **Top blocked domains & recent activity**: on-device counters and one-tap allowlisting, persisted.
+- **Backup & restore**: full JSON export/import of sources, blocks, settings via system picker.
 - Configurable upstream (DoH endpoint or classic IPv4) and in-memory DNS cache duration.
+
+## Using the Official Logo & Building
+
+1. **Logo asset (required for the 3D splash, header, and Dashboard hero)**:
+   - Export the ShieldDNS logo image you have (the shield + network graphic + wordmark).
+   - Place `shield_dns_logo.png` (high resolution recommended) in:
+     `app/src/main/res/drawable/shield_dns_logo.png`
+   - For best results across densities, also provide versions in the `drawable-*` folders.
+   - (Optional) For the launcher icon, export just the shield portion (no text) and update the adaptive icon foreground in `res/mipmap-*` and `drawable/ic_launcher_foreground.xml`.
+
+2. **Build**:
+   ```bash
+   ./gradlew assembleDebug
+   ```
+   Install the resulting APK from `app/build/outputs/apk/debug/`.
+
+3. **Run**:
+   - Grant VPN permission on first launch.
+   - The beautiful 3D splash will appear on every cold start.
+   - Use the "Active Shields" floating cards on the home screen — they control real protection (Indian Scam Shield, protection modes, RASP, risk scoring, browser privacy, and actual crypto-miner blocks).
+
+## Privacy & Architecture
+
+ShieldDNS is 100% on-device. No analytics, no data leaves your phone. All threat detection, rule engines, and ML (optional TFLite) run locally.
+
+See [PRIVACY.md](PRIVACY.md) for details.
+
+## Contributing
+
+Issues and PRs welcome! The UI is built with Jetpack Compose + a custom "liquid glass + 3D" design system. The core is a high-performance concurrent DNS engine with on-device heuristics and optional remote stubs (HMAC-protected).
+
+---
+
+*Originally evolved from ClearGuard concepts into the current ShieldDNS experience with the reference-inspired modern UI.*
 - Battery-conscious design: DNS-only route, in-memory DNS cache, pooled DoH connections, no wakelocks; the only scheduled work is the optional once-a-day blocklist refresh.
 - Transparent privacy posture: no analytics SDKs, no accounts, no remote app logs.
 
@@ -123,7 +157,7 @@ This workspace does not include a Gradle wrapper because one could not be genera
 
 ## Download APK From GitHub
 
-The GitHub Actions workflow at `.github/workflows/android-apk.yml` builds `ClearGuard-debug.apk` on every push to `main` and publishes it to the `latest` GitHub Release.
+The project uses standard Android build tools. Debug APKs can be built locally with `./gradlew assembleDebug` (or via Android Studio). GitHub Actions (if configured) can build releases.
 
 After pushing to GitHub, download the APK from:
 

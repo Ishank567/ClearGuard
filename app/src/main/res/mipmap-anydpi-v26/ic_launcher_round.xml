@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- See ic_launcher.xml for logo update instructions (use the attached ShieldDNS shield graphic for the foreground) -->
     <background android:drawable="@color/clear_bg" />
     <foreground android:drawable="@drawable/ic_launcher_foreground" />
 </adaptive-icon>

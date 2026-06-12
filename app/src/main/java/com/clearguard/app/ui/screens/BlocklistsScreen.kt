@@ -541,12 +541,12 @@ fun BlocklistsScreen() {
                 }
             }
 
-            // Wire risk into custom block auto-suggest: High Risk Phones from local FRI DB
+            // High-Risk Phones from local FRI DB + Edge signals (for suggestions / one-tap security block)
             item {
                 GlassCard {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Suggested High-Risk Phones (FRI DB)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ClearColors.danger)
-                        Text("From local fri_risk_db.txt + runtime seeds. Tap to add to security blocks (auto-suggest for blocking high-risk senders).", fontSize = 11.sp, color = ClearColors.muted)
+                        Text("From local fri_risk_db.txt + runtime seeds / Edge. Tap to add 'phone:...' marker to security blocks.", fontSize = 11.sp, color = ClearColors.muted)
                         Spacer(Modifier.height(8.dp))
 
                         val highRisk = remember { com.clearguard.app.security.OnDeviceRuleEngine.getHighRiskPhones(10) }

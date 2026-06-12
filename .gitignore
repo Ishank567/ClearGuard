@@ -1,7 +1,35 @@
+# Gradle
 .gradle/
-/build/
-/app/build/
+build/
+app/build/
 local.properties
 *.iml
+
+# IDE
 .idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Android
+captures/
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Keystore / signing
+*.jks
+*.keystore
+
+# Misc
+*.log
+*.tmp
+
+# ShieldDNS specific
+# (Add your logo here after placing it)
+# app/src/main/res/drawable/shield_dns_logo.png  (do not commit until you add it)

@@ -518,7 +518,7 @@ fun SettingsScreen(
                     mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_MOBILE_RISK_REMOTE_SIGNALS, PreferenceKeys.DEFAULT_MOBILE_RISK_REMOTE_SIGNALS))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Use Remote FRI/Operator Signals (Enterprise API)", modifier = Modifier.weight(1f), fontSize = 12.sp, color = ClearColors.muted)
+                    Text("Use Remote FRI/Operator Signals (for higher accuracy)", modifier = Modifier.weight(1f), fontSize = 12.sp, color = ClearColors.muted)
                     ClearSwitch(checked = remoteSignals, onCheckedChange = { remoteSignals = it; prefs.edit().putBoolean(PreferenceKeys.KEY_MOBILE_RISK_REMOTE_SIGNALS, it).apply() })
                 }
 

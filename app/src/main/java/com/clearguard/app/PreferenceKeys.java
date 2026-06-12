@@ -105,7 +105,7 @@ public final class PreferenceKeys {
     public static final boolean DEFAULT_UPI_PAYEE_VERIFICATION_ENABLED = true;
     public static final boolean DEFAULT_RASP_ENABLED = false; // high complexity, opt-in
 
-    /** Enable remote FRI/operator signals for the Mobile Risk Scoring API (enterprise). */
+    /** Enable remote FRI/operator signals for the Mobile Risk Scoring API (advanced). */
     public static final String KEY_MOBILE_RISK_REMOTE_SIGNALS = "mobile_risk_remote_signals";
     public static final boolean DEFAULT_MOBILE_RISK_REMOTE_SIGNALS = false;
 
