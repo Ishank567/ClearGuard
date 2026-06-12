@@ -377,7 +377,7 @@ object OnDeviceRuleEngine {
             val url = endpoint
             val jsonBody = JSONObject().apply {
                 put("number_hash", hmac)
-                put("client", "ClearGuard-Enterprise")
+                put("client", "ShieldDNS-Enterprise")
                 put("version", "1.0")
                 put("timestamp", System.currentTimeMillis())
             }.toString()
@@ -387,7 +387,7 @@ object OnDeviceRuleEngine {
                     .url(url)
                     .post(jsonBody.toRequestBody("application/json".toMediaType()))
                     .header("Authorization", "Bearer ${getApiKeyOrStub()}")
-                    .header("X-Client", "ClearGuard-Enterprise")
+                    .header("X-Client", "ShieldDNS-Enterprise")
                     .header("X-Request-ID", java.util.UUID.randomUUID().toString()) // for tracing
                     .build()
 

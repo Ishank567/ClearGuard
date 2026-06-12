@@ -174,7 +174,7 @@ fun EnterpriseScreen() {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "ClearGuard Enterprise",
+                    text = "ShieldDNS Enterprise",
                     style = MaterialTheme.typography.displaySmall,
                     color = ClearColors.text,
                     textAlign = TextAlign.Center

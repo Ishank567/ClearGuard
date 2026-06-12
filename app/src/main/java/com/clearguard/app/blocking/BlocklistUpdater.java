@@ -117,7 +117,7 @@ public final class BlocklistUpdater {
         connection.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
         connection.setReadTimeout(READ_TIMEOUT_MILLIS);
         connection.setInstanceFollowRedirects(true);
-        connection.setRequestProperty("User-Agent", "ClearGuard/0.1 local-dns-filter");
+        connection.setRequestProperty("User-Agent", "ShieldDNS/0.4 local-dns-filter");
 
         int code = connection.getResponseCode();
         if (code < 200 || code >= 300) {

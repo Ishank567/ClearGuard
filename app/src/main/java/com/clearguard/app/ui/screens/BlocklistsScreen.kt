@@ -875,7 +875,7 @@ private fun GlassListItem(row: BlocklistRow) {
 private fun buildBackupJson(context: android.content.Context): String {
     val prefs = PreferenceKeys.prefs(context)
     val root = JSONObject()
-    root.put("app", "ClearGuard")
+    root.put("app", "ShieldDNS")
     root.put("backup_version", 1)
     root.put("exported_at_millis", System.currentTimeMillis())
     root.put("sources", JSONArray(PreferenceKeys.stringSetSorted(context, PreferenceKeys.KEY_SOURCE_URLS)))
@@ -916,7 +916,7 @@ private fun applyBackupJson(context: android.content.Context, raw: String): Stri
     if (!root.has("sources") && !root.has("custom_blocks") &&
         !root.has("allowlist") && !root.has("settings")
     ) {
-        return "Import failed: not a ClearGuard backup"
+        return "Import failed: not a ShieldDNS backup"
     }
 
     val prefs = PreferenceKeys.prefs(context)

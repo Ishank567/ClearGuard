@@ -278,7 +278,7 @@ fun StatisticsScreen(
                 Text("Local Counters", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "ClearGuard keeps aggregate DNS counts only. Recent blocked domains remain in memory and are cleared when protection stops.",
+                    "ShieldDNS keeps aggregate DNS counts only. Recent blocked domains remain in memory and are cleared when protection stops.",
                     color = ClearColors.muted,
                     fontSize = 13.sp
                 )

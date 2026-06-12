@@ -35,7 +35,7 @@ class DohResolver {
         val request = Request.Builder()
             .url(endpoint)
             .header("Accept", DNS_MESSAGE_TYPE)
-            .header("User-Agent", "ClearGuard/0.3 DoH")
+            .header("User-Agent", "ShieldDNS/0.4 DoH")
             .post(dnsPayload.toRequestBody(mediaType))
             .build()
 
