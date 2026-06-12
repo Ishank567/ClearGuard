@@ -270,9 +270,9 @@ public final class ScamDetector {
         try {
             String combinedForRules = domain + " " + (reason.isEmpty() ? "" : reason);
             com.clearguard.app.security.OnDeviceRuleEngine.ClassificationResult ruleRes =
-                    com.clearguard.app.security.OnDeviceRuleEngine.classify(combinedForRules, domain);
+                    com.clearguard.app.security.OnDeviceRuleEngine.INSTANCE.classify(combinedForRules, domain);
 
-            if (ruleRes.getIsPhishing() || ruleRes.getScore() >= 55) {
+            if (ruleRes.isPhishing() || ruleRes.getScore() >= 55) {
                 score += (int) (ruleRes.getScore() * 0.35);  // blend with existing heuristics
                 if (reason.isEmpty() || ruleRes.getScore() > 70) {
                     reason = ruleRes.getLabel();
@@ -284,8 +284,8 @@ public final class ScamDetector {
         if (contextForTFLite != null && useTFLiteIfAvailable) {
             try {
                 com.clearguard.app.security.PhishingClassifier.PhishingResult mlRes =
-                        com.clearguard.app.security.PhishingClassifier.classify(
-                                contextForTFLite, domain + " " + reason, domain, true);
+                        com.clearguard.app.security.PhishingClassifier.INSTANCE.classify(
+                                contextForTFLite, domain + " " + reason, domain, true, null, null);
                 if (mlRes.getUsedML()) {
                     int mlPoints = (int) (mlRes.getPhishingProbability() * 42);
                     score += mlPoints;
