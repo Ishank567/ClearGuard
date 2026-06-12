@@ -104,9 +104,6 @@ public final class ScamDetector {
      * Enhanced analysis with on-device rule engine (fast regex + heuristics) + optional small TFLite phishing model.
      * indianScamShieldEnabled enables the 9 dedicated India-specific scam patterns.
      */
-    public static Result analyze(String rawDomain, boolean religiousCleanEnabled, String protectionMode,
-                                 boolean indianScamShieldEnabled, android.content.Context contextForTFLite, boolean useTFLiteIfAvailable) {
-
     public static Result analyze(String rawDomain, boolean religiousCleanEnabled, String protectionMode, boolean indianScamShieldEnabled,
                                  android.content.Context contextForTFLite, boolean useTFLiteIfAvailable) {
         String domain = HostBlocker.normalizeDomain(rawDomain);
