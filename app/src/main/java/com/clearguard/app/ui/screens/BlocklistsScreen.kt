@@ -31,7 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import com.clearguard.app.ui.components.LiquidGlassButton
+import com.clearguard.app.ui.components.PrimaryButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,10 +54,9 @@ import com.clearguard.app.blocking.BlocklistUpdater
 import com.clearguard.app.blocking.HostBlocker
 import com.clearguard.app.ui.components.ClearSwitch
 import com.clearguard.app.ui.components.GlassCard
-import com.clearguard.app.ui.components.LiquidGlassButton
-import com.clearguard.app.ui.components.LiquidGlassIconButton
-import com.clearguard.app.ui.theme.ClearColors
-import com.clearguard.app.ui.theme.ClearDesign
+import com.clearguard.app.ui.components.PrimaryButton
+import com.clearguard.app.ui.components.LiquidGlassIconButton // keep for icon buttons if used, or replace later
+// Using MaterialTheme + Clear* compatibility shims for the fresh UI
 import com.clearguard.app.vpn.ClearGuardVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -321,7 +320,7 @@ fun BlocklistsScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = ClearDesign.screenHPadding, vertical = 12.dp)
+            .padding(horizontal = 20.dp, vertical = 12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -329,7 +328,7 @@ fun BlocklistsScreen() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Blocklists", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-            LiquidGlassButton(
+            PrimaryButton(
                 onClick = {
                     scope.launch {
                         updating = true
@@ -378,14 +377,14 @@ fun BlocklistsScreen() {
         Text(
             "${formatCount(activeHosts)} active blocked domains. Last update: ${lastUpdateLabel(prefs.getLong(PreferenceKeys.KEY_LAST_UPDATE_MILLIS, 0L))}",
             fontSize = 12.sp,
-            color = ClearColors.muted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
         if (updateMessage.isNotBlank()) {
             Text(
                 updateMessage,
                 fontSize = 12.sp,
-                color = ClearColors.green,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)
             )
         }
@@ -432,8 +431,8 @@ fun BlocklistsScreen() {
             item {
                 GlassCard {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Personal Block AI", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = ClearColors.green)
-                        Text("Describe what to block. Example: \"Block all betting ads and loan ads.\"", fontSize = 12.sp, color = ClearColors.muted)
+                        Text("Personal Block AI", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = MaterialTheme.colorScheme.green)
+                        Text("Describe what to block. Example: \"Block all betting ads and loan ads.\"", fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
                         Spacer(Modifier.height(8.dp))
 
                         var aiQuery by remember { mutableStateOf("") }
@@ -453,7 +452,7 @@ fun BlocklistsScreen() {
                             })
                         )
                         Spacer(Modifier.height(8.dp))
-                        LiquidGlassButton(
+                        PrimaryButton(
                             onClick = {
                                 if (aiQuery.isNotBlank()) {
                                     val added = applyPersonalBlockAI(context, aiQuery)
@@ -473,11 +472,11 @@ fun BlocklistsScreen() {
             item {
                 GlassCard {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Filter Conflict Detector", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = ClearColors.green)
-                        Text("Detect overlapping or contradictory rules between custom blocks, security blocks, allowlist, and downloaded filters.", fontSize = 12.sp, color = ClearColors.muted)
+                        Text("Filter Conflict Detector", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = MaterialTheme.colorScheme.green)
+                        Text("Detect overlapping or contradictory rules between custom blocks, security blocks, allowlist, and downloaded filters.", fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
                         Spacer(Modifier.height(8.dp))
 
-                        LiquidGlassButton(
+                        PrimaryButton(
                             onClick = {
                                 val newConflicts = detectConflicts(
                                     context,
@@ -500,12 +499,12 @@ fun BlocklistsScreen() {
                                 Spacer(Modifier.height(6.dp))
                                 GlassCard(glassAlpha = 0.7f) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(conflict.domain, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = ClearColors.danger)
-                                        Text("${conflict.type}: ${conflict.description}", fontSize = 12.sp, color = ClearColors.text)
+                                        Text(conflict.domain, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.danger)
+                                        Text("${conflict.type}: ${conflict.description}", fontSize = 12.sp, color = MaterialTheme.colorScheme.text)
                                         Spacer(Modifier.height(8.dp))
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             conflict.actions.forEach { action ->
-                                                LiquidGlassButton(
+                                                PrimaryButton(
                                                     onClick = {
                                                         when (action) {
                                                             "Remove from allowlist" -> {
@@ -535,7 +534,7 @@ fun BlocklistsScreen() {
                             }
                         } else if (lastConflictCheck > 0) {
                             Spacer(Modifier.height(8.dp))
-                            Text("No conflicts detected in your user rules.", fontSize = 12.sp, color = ClearColors.muted)
+                            Text("No conflicts detected in your user rules.", fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
                         }
                     }
                 }
@@ -545,13 +544,13 @@ fun BlocklistsScreen() {
             item {
                 GlassCard {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Suggested High-Risk Phones (FRI DB)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ClearColors.danger)
-                        Text("From local fri_risk_db.txt + runtime seeds / Edge. Tap to add 'phone:...' marker to security blocks.", fontSize = 11.sp, color = ClearColors.muted)
+                        Text("Suggested High-Risk Phones (FRI DB)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = MaterialTheme.colorScheme.danger)
+                        Text("From local fri_risk_db.txt + runtime seeds / Edge. Tap to add 'phone:...' marker to security blocks.", fontSize = 11.sp, color = MaterialTheme.colorScheme.muted)
                         Spacer(Modifier.height(8.dp))
 
                         val highRisk = remember { com.clearguard.app.security.OnDeviceRuleEngine.getHighRiskPhones(10) }
                         if (highRisk.isEmpty()) {
-                            Text("No high-risk entries loaded.", fontSize = 12.sp, color = ClearColors.muted)
+                            Text("No high-risk entries loaded.", fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
                         } else {
                             highRisk.forEach { num ->
                                 Row(
@@ -561,7 +560,7 @@ fun BlocklistsScreen() {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(num, modifier = Modifier.weight(1f), fontSize = 13.sp)
-                                    LiquidGlassButton(
+                                    PrimaryButton(
                                         onClick = {
                                             val marker = "phone:$num"
                                             if (PreferenceKeys.addToStringSet(context, PreferenceKeys.KEY_SECURITY_BLOCKS, marker)) {
@@ -665,7 +664,7 @@ fun BlocklistsScreen() {
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LiquidGlassButton(
+                    PrimaryButton(
                         onClick = { exportLauncher.launch("clearguard-backup.json") },
                         modifier = Modifier.weight(1f)
                     ) {
@@ -676,7 +675,7 @@ fun BlocklistsScreen() {
                         )
                         Text("Export", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     }
-                    LiquidGlassButton(
+                    PrimaryButton(
                         onClick = {
                             importLauncher.launch(
                                 arrayOf("application/json", "text/*", "application/octet-stream")
@@ -716,14 +715,14 @@ private fun SectionLabel(text: String) {
             modifier = Modifier
                 .size(6.dp)
                 .clip(CircleShape)
-                .background(ClearColors.green)
+                .background(MaterialTheme.colorScheme.green)
         )
         Spacer(Modifier.width(8.dp))
         Text(
             text = text,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = ClearColors.text
+            color = MaterialTheme.colorScheme.text
         )
     }
 }
@@ -733,7 +732,7 @@ private fun HelpText(text: String) {
     Text(
         text,
         fontSize = 12.sp,
-        color = ClearColors.muted,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 4.dp)
     )
 }
@@ -743,7 +742,7 @@ private fun ErrorText(text: String) {
     Text(
         text,
         fontSize = 12.sp,
-        color = ClearColors.danger,
+        color = MaterialTheme.colorScheme.danger,
         modifier = Modifier.padding(start = 4.dp)
     )
 }
@@ -816,7 +815,7 @@ private fun EntryRow(
                     Text(
                         subtitle,
                         fontSize = 11.sp,
-                        color = ClearColors.muted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -833,8 +832,8 @@ private fun EntryRow(
                 Spacer(Modifier.width(8.dp))
                 LiquidGlassIconButton(
                     onClick = onRemove,
-                    accent = ClearColors.danger,
-                    contentColor = ClearColors.danger,
+                    accent = MaterialTheme.colorScheme.danger,
+                    contentColor = MaterialTheme.colorScheme.danger,
                     size = 34.dp
                 ) {
                     Icon(
@@ -864,9 +863,9 @@ private fun GlassListItem(row: BlocklistRow) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(row.name, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Text("${row.count} domains", fontSize = 12.sp, color = ClearColors.muted)
+                Text("${row.count} domains", fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
             }
-            Text(row.source, fontSize = 12.sp, color = ClearColors.muted)
+            Text(row.source, fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
         }
     }
 }

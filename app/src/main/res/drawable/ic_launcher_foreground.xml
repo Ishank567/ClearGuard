@@ -1,59 +1,56 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Soft outer glow — ambient shield shadow -->
-    <path
-        android:fillColor="#1A3B82F6"
-        android:pathData="M54,8 L92,24 L89,62 C85,82 72,96 54,104 C36,96 23,82 19,62 L16,24 Z" />
+    <!-- Clean modern shield for launcher icon - simplified for adaptive icon mask -->
 
-    <!-- Main shield body — sapphire to electric blue diagonal gradient -->
-    <path android:pathData="M54,14 L88,28 L85,58 C82,76 70,89 54,97 C38,89 26,76 23,58 L20,28 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="20" android:startY="14"
-                android:endX="88"  android:endY="97"
-                android:startColor="#1E3A8A"
-                android:endColor="#2563EB" />
-        </aapt:attr>
-    </path>
-
-    <!-- Cyan accent rim — subtle inner glow for depth -->
+    <!-- Main shield -->
     <path
-        android:pathData="M54,18 L84,31 L82,56 C79,72 68,84 54,91 C40,84 29,72 26,56 L24,31 Z"
-        android:strokeWidth="1.5"
-        android:strokeColor="#0EA5E9"
+        android:fillColor="#0F766E"
+        android:pathData="M54,10 L92,28 Q88,60 54,95 Q20,60 16,28 Z" />
+
+    <!-- Inner panel -->
+    <path
+        android:fillColor="#115E59"
+        android:pathData="M54,18 L86,33 Q83,57 54,82 Q25,57 22,33 Z" />
+
+    <!-- Accent rim -->
+    <path
         android:fillColor="@android:color/transparent"
-        android:strokeAlpha="0.5" />
+        android:strokeColor="#14B8A6"
+        android:strokeWidth="2"
+        android:pathData="M54,14 L89,30 Q86,58 54,90 Q22,58 19,30 Z" />
 
-    <!-- Inner shield panel — slightly lighter blue for layered depth -->
-    <path android:pathData="M54,21 L81,33 L79,55 C76,70 67,81 54,88 C41,81 32,70 29,55 L27,33 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="27" android:startY="21"
-                android:endX="81"  android:endY="88"
-                android:startColor="#1E40AF"
-                android:endColor="#1D4ED8" />
-        </aapt:attr>
-    </path>
-
-    <!-- Top glass specular highlight -->
+    <!-- Central network hub (minimal) -->
     <path
-        android:fillColor="#14FFFFFF"
-        android:pathData="M54,21 L81,33 L80,40 C67,36 41,36 28,40 L27,33 Z" />
+        android:fillColor="#CCFBF1"
+        android:pathData="M54,48 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
 
-    <!-- Checkmark — crisp white protection verified symbol -->
+    <!-- Small nodes -->
+    <path android:fillColor="#CCFBF1" android:pathData="M54,30 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
+    <path android:fillColor="#CCFBF1" android:pathData="M38,58 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
+    <path android:fillColor="#CCFBF1" android:pathData="M70,58 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
+
+    <!-- Thin connections -->
     <path
-        android:pathData="M40,58 L50,68 L68,46"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5.5"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#CCFBF1"
+        android:strokeWidth="1.8"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:fillColor="@android:color/transparent" />
+        android:pathData="M54,41 L54,33" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#CCFBF1"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M54,55 L42,56" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#CCFBF1"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M54,55 L66,56" />
 
 </vector>

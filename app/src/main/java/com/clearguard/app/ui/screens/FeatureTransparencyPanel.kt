@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clearguard.app.PreferenceKeys
 import com.clearguard.app.ui.components.GlassCard
-import com.clearguard.app.ui.theme.ClearColors
+// Using MaterialTheme + Clear* compatibility shims for the fresh UI
 
 private data class FeatureTransparencyItem(
     val name: String,
@@ -67,17 +67,17 @@ fun FeatureTransparencyPanel(
                         text = if (compact) "Active Engines" else "Feature Transparency",
                         fontSize = if (compact) 15.sp else 16.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = ClearColors.text
+                        color = MaterialTheme.colorScheme.text
                     )
                     Text(
                         text = "$enabledCount of ${items.size} visible protections are enabled",
                         fontSize = 11.sp,
-                        color = ClearColors.muted
+                        color = MaterialTheme.colorScheme.muted
                     )
                 }
                 TransparencyChip(
                     label = if (compact) "LIVE MAP" else "AUDIT",
-                    color = ClearColors.blue
+                    color = MaterialTheme.colorScheme.blue
                 )
             }
 
@@ -97,7 +97,7 @@ private fun FeatureTransparencyRow(
     item: FeatureTransparencyItem,
     compact: Boolean
 ) {
-    val statusColor = if (item.enabled) ClearColors.green else ClearColors.muted
+    val statusColor = if (item.enabled) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.muted
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -115,7 +115,7 @@ private fun FeatureTransparencyRow(
                 text = item.name,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = ClearColors.text,
+                color = MaterialTheme.colorScheme.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -148,13 +148,13 @@ private fun TransparencyLine(label: String, value: String) {
             text = label.uppercase(),
             fontSize = 9.sp,
             fontFamily = FontFamily.Monospace,
-            color = ClearColors.muted,
+            color = MaterialTheme.colorScheme.muted,
             modifier = Modifier.weight(0.36f)
         )
         Text(
             text = value,
             fontSize = 10.5.sp,
-            color = ClearColors.text,
+            color = MaterialTheme.colorScheme.text,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)

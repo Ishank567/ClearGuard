@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.clearguard.app.PreferenceKeys
 import com.clearguard.app.ui.components.GlassCard
-import com.clearguard.app.ui.theme.ClearColors
+// Using MaterialTheme + Clear* compatibility shims for the fresh UI
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -111,8 +111,8 @@ fun BrowserScreen() {
                     TextField(
                         value = urlInput,
                         onValueChange = { urlInput = it },
-                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, color = ClearColors.text),
-                        placeholder = { Text("Search or type URL", color = ClearColors.muted, fontSize = 13.sp) },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, color = MaterialTheme.colorScheme.text),
+                        placeholder = { Text("Search or type URL", color = MaterialTheme.colorScheme.muted, fontSize = 13.sp) },
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
@@ -123,12 +123,12 @@ fun BrowserScreen() {
                             unfocusedContainerColor = Color.Transparent,
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = ClearColors.text,
-                            unfocusedTextColor = ClearColors.text
+                            focusedTextColor = MaterialTheme.colorScheme.text,
+                            unfocusedTextColor = MaterialTheme.colorScheme.text
                         ),
                         singleLine = true,
                         leadingIcon = {
-                            Icon(Icons.Default.Language, contentDescription = null, tint = ClearColors.muted)
+                            Icon(Icons.Default.Language, contentDescription = null, tint = MaterialTheme.colorScheme.muted)
                         }
                     )
 
@@ -143,7 +143,7 @@ fun BrowserScreen() {
                             webView?.loadUrl(target)
                         }
                     ) {
-                        Icon(Icons.Default.ArrowForward, contentDescription = "Go", tint = ClearColors.green)
+                        Icon(Icons.Default.ArrowForward, contentDescription = "Go", tint = MaterialTheme.colorScheme.green)
                     }
                 }
 
@@ -304,12 +304,12 @@ fun BrowserScreen() {
                     cornerRadius = 10.dp
                 ) {
                     Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = ClearColors.danger, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.danger, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "${risk.label} • ${(risk.phishingProbability * 100).toInt()}%  ${if (risk.usedML) "(TFLite+rules)" else "(rules)"}",
                             fontSize = 11.sp,
-                            color = ClearColors.danger,
+                            color = MaterialTheme.colorScheme.danger,
                             fontWeight = FontWeight.Medium
                         )
                         val regional = com.clearguard.app.security.OnDeviceRuleEngine.getRegionalExplanation(
@@ -320,7 +320,7 @@ fun BrowserScreen() {
                                 risk.phishingProbability > 0.5f
                             )
                         )
-                        Text(regional, fontSize = 9.sp, color = ClearColors.muted)
+                        Text(regional, fontSize = 9.sp, color = MaterialTheme.colorScheme.muted)
                     }
                 }
             }
@@ -336,9 +336,9 @@ fun BrowserScreen() {
                 val paymentCheck = com.clearguard.app.security.OnDeviceRuleEngine.safePaymentCheck("$url in-app browser transaction")
                 if (paymentCheck != null) {
                     val accent = when (paymentCheck.riskLevel) {
-                        "High" -> ClearColors.danger
-                        "Medium" -> ClearColors.warning
-                        else -> ClearColors.green
+                        "High" -> MaterialTheme.colorScheme.danger
+                        "Medium" -> MaterialTheme.colorScheme.warning
+                        else -> MaterialTheme.colorScheme.green
                     }
                     GlassCard(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
@@ -346,10 +346,10 @@ fun BrowserScreen() {
                     ) {
                         Column(Modifier.padding(10.dp)) {
                             Text("Safe Payment Check", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = accent)
-                            Text(paymentCheck.alertMessage, fontSize = 11.sp, color = ClearColors.text)
-                            Text("Risk: ${paymentCheck.riskScore}/100 | ${paymentCheck.recommendation}", fontSize = 10.sp, color = ClearColors.muted)
+                            Text(paymentCheck.alertMessage, fontSize = 11.sp, color = MaterialTheme.colorScheme.text)
+                            Text("Risk: ${paymentCheck.riskScore}/100 | ${paymentCheck.recommendation}", fontSize = 10.sp, color = MaterialTheme.colorScheme.muted)
                             paymentCheck.reasons.take(2).forEach { reason ->
-                                Text("• $reason", fontSize = 10.sp, color = ClearColors.muted)
+                                Text("• $reason", fontSize = 10.sp, color = MaterialTheme.colorScheme.muted)
                             }
                         }
                     }
@@ -364,7 +364,7 @@ fun BrowserScreen() {
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .border(1.dp, ClearColors.border.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                .border(1.dp, MaterialTheme.colorScheme.border.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
         ) {
             AndroidView(
                 factory = { ctx ->
@@ -516,14 +516,14 @@ fun BrowserScreen() {
                         modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = ClearColors.danger)
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.danger)
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Adware/Fake Button Blocked", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.danger)
-                            Text("ShieldDNS auto-blocked a fake download overlay trigger.", fontSize = 11.sp, color = ClearColors.text)
+                            Text("Adware/Fake Button Blocked", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.danger)
+                            Text("ShieldDNS auto-blocked a fake download overlay trigger.", fontSize = 11.sp, color = MaterialTheme.colorScheme.text)
                         }
                         IconButton(onClick = { fakeDownloadBlockedAlert = false }) {
-                            Icon(Icons.Default.Close, contentDescription = null, tint = ClearColors.muted)
+                            Icon(Icons.Default.Close, contentDescription = null, tint = MaterialTheme.colorScheme.muted)
                         }
                     }
                 }
@@ -545,18 +545,18 @@ fun BrowserScreen() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { webView?.goBack() }, enabled = canGoBack) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = if (canGoBack) ClearColors.green else ClearColors.muted)
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = if (canGoBack) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.muted)
                 }
                 IconButton(onClick = { webView?.goForward() }, enabled = canGoForward) {
-                    Icon(Icons.Default.ArrowForward, contentDescription = "Forward", tint = if (canGoForward) ClearColors.green else ClearColors.muted)
+                    Icon(Icons.Default.ArrowForward, contentDescription = "Forward", tint = if (canGoForward) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.muted)
                 }
                 IconButton(onClick = { webView?.reload() }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = ClearColors.green)
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.green)
                 }
                 IconButton(onClick = {
                     webView?.loadUrl("https://google.com")
                 }) {
-                    Icon(Icons.Default.Home, contentDescription = "Home", tint = ClearColors.green)
+                    Icon(Icons.Default.Home, contentDescription = "Home", tint = MaterialTheme.colorScheme.green)
                 }
 
                 // === "Clean My Website" Button (prominent per user request #5) ===
@@ -578,7 +578,7 @@ fun BrowserScreen() {
                         }
                     }
                 }) {
-                    Icon(Icons.Default.CleaningServices, contentDescription = "Clean this page", tint = ClearColors.green)
+                    Icon(Icons.Default.CleaningServices, contentDescription = "Clean this page", tint = MaterialTheme.colorScheme.green)
                 }
             }
         }
@@ -594,10 +594,10 @@ private fun ShieldTogglePill(
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (active) ClearColors.green.copy(alpha = 0.15f) else Color.Transparent)
+            .background(if (active) MaterialTheme.colorScheme.green.copy(alpha = 0.15f) else Color.Transparent)
             .border(
                 width = 1.dp,
-                color = if (active) ClearColors.green.copy(alpha = 0.35f) else ClearColors.border.copy(alpha = 0.15f),
+                color = if (active) MaterialTheme.colorScheme.green.copy(alpha = 0.35f) else MaterialTheme.colorScheme.border.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(10.dp)
             )
             .clickable { onClick() }
@@ -608,7 +608,7 @@ private fun ShieldTogglePill(
             text = label,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
-            color = if (active) ClearColors.green else ClearColors.muted
+            color = if (active) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.muted
         )
     }
 }

@@ -1,99 +1,94 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="512dp"
     android:height="512dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
 
-    <!-- Outermost ambient glow -->
-    <path
-        android:fillColor="#1A3B82F6"
-        android:pathData="M256,24 L460,100 L448,288 C432,400 352,468 256,500 C160,468 80,400 64,288 L52,100 Z" />
+    <!-- Clean modern shield for ShieldDNS - flat, minimalist, classy design -->
 
-    <!-- Main shield body — sapphire to electric blue diagonal gradient -->
-    <path android:pathData="M256,48 L440,116 L428,272 C414,378 340,438 256,468 C172,438 98,378 84,272 L72,116 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="72"  android:startY="48"
-                android:endX="440"  android:endY="468"
-                android:startColor="#1E3A8A"
-                android:endColor="#2563EB" />
-        </aapt:attr>
-    </path>
-
-    <!-- Cyan accent rim — inner glow border for depth -->
+    <!-- Main shield body - deep teal primary -->
     <path
-        android:pathData="M256,68 L420,130 L410,266 C398,362 332,416 256,444 C180,416 114,362 102,266 L92,130 Z"
-        android:strokeWidth="6"
-        android:strokeColor="#0EA5E9"
+        android:fillColor="#0F766E"
+        android:pathData="M256,40 L445,115 Q430,290 256,470 Q80,290 67,115 Z" />
+
+    <!-- Subtle inner panel for depth (slightly lighter teal) -->
+    <path
+        android:fillColor="#115E59"
+        android:pathData="M256,70 L415,135 Q402,275 256,430 Q108,275 97,135 Z" />
+
+    <!-- Thin elegant accent stroke -->
+    <path
         android:fillColor="@android:color/transparent"
-        android:strokeAlpha="0.45" />
+        android:strokeColor="#14B8A6"
+        android:strokeWidth="8"
+        android:pathData="M256,55 L430,125 Q418,282 256,455 Q92,282 82,125 Z" />
 
-    <!-- Inner shield panel — deeper blue layer -->
-    <path android:pathData="M256,80 L410,138 L400,262 C390,352 328,406 256,432 C184,406 122,352 112,262 L102,138 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="102" android:startY="80"
-                android:endX="410"  android:endY="432"
-                android:startColor="#1E40AF"
-                android:endColor="#1D4ED8" />
-        </aapt:attr>
-    </path>
-
-    <!-- Top glass specular highlight -->
+    <!-- Minimal internal network symbol - modern connected nodes representing DNS protection -->
+    <!-- Central hub -->
     <path
-        android:fillColor="#12FFFFFF"
-        android:pathData="M256,80 L410,138 L406,170 C340,152 172,152 106,170 L102,138 Z" />
+        android:fillColor="#CCFBF1"
+        android:pathData="M256,220 m-18,0 a18,18 0 1,0 36,0 a18,18 0 1,0 -36,0" />
 
-    <!-- Decorative orbit ring — upper-left to lower-right arc -->
+    <!-- Top node -->
     <path
-        android:pathData="M170,180 Q256,140 342,200"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3"
-        android:strokeAlpha="0.15"
+        android:fillColor="#CCFBF1"
+        android:pathData="M256,130 m-11,0 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0" />
+
+    <!-- Bottom-left node -->
+    <path
+        android:fillColor="#CCFBF1"
+        android:pathData="M175,310 m-11,0 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0" />
+
+    <!-- Bottom-right node -->
+    <path
+        android:fillColor="#CCFBF1"
+        android:pathData="M337,310 m-11,0 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0" />
+
+    <!-- Left node -->
+    <path
+        android:fillColor="#CCFBF1"
+        android:pathData="M160,205 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" />
+
+    <!-- Right node -->
+    <path
+        android:fillColor="#CCFBF1"
+        android:pathData="M352,205 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" />
+
+    <!-- Thin connection lines -->
+    <path
         android:fillColor="@android:color/transparent"
-        android:strokeLineCap="round" />
-
-    <!-- Decorative orbit ring — lower arc -->
-    <path
-        android:pathData="M170,340 Q256,390 342,320"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3"
-        android:strokeAlpha="0.12"
-        android:fillColor="@android:color/transparent"
-        android:strokeLineCap="round" />
-
-    <!-- Checkmark — bold white verified / protected symbol -->
-    <path
-        android:pathData="M196,272 L240,318 L330,216"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="28"
+        android:strokeColor="#CCFBF1"
+        android:strokeWidth="3.5"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:fillColor="@android:color/transparent" />
-
-    <!-- Subtle inner shadow on checkmark for depth -->
+        android:pathData="M256,202 L256,141" />
     <path
-        android:pathData="M196,272 L240,318 L330,216"
-        android:strokeColor="#93C5FD"
-        android:strokeWidth="10"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#CCFBF1"
+        android:strokeWidth="3.5"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeAlpha="0.25"
-        android:fillColor="@android:color/transparent" />
-
-    <!-- Small accent dot — top-right sparkle -->
+        android:pathData="M256,238 L180,299" />
     <path
-        android:pathData="M368,160 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"
-        android:fillColor="#60A5FA"
-        android:fillAlpha="0.6" />
-
-    <!-- Small accent dot — bottom-left sparkle -->
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#CCFBF1"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M256,238 L332,299" />
     <path
-        android:pathData="M148,350 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0"
-        android:fillColor="#38BDF8"
-        android:fillAlpha="0.5" />
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#CCFBF1"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M238,215 L170,210" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#CCFBF1"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M274,215 L342,210" />
+
+    <!-- Very subtle protection indicator at bottom (small clean check or bar) -->
+    <path
+        android:fillColor="#CCFBF1"
+        android:pathData="M210,365 L235,390 L305,320" />
 
 </vector>

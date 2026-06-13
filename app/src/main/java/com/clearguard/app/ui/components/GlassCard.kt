@@ -1,209 +1,114 @@
 package com.clearguard.app.ui.components
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.clearguard.app.ui.theme.ClearColors
-import com.clearguard.app.ui.theme.ClearDesign
 
 /**
- * Premium 3D Glassmorphic Card
- * - Frosted glass surface with transparency
- * - Crisp edge highlight (glass refraction)
- * - Strong drop shadow for floating 3D depth
- * - Bevel / specular highlight gradient for realistic 3D glass feel
- *
- * All defaults come from [ClearDesign]; colors follow the active [ClearColors]
- * palette, so the card adapts to light and dark themes automatically.
+ * Modern, classy card for the fresh ShieldDNS UI.
+ * Clean, elevated surfaces with generous rounded corners. Minimal and premium.
  */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = ClearDesign.cardCorner,
-    glassAlpha: Float = ClearDesign.cardGlassAlpha,
-    elevation: Dp = ClearDesign.cardElevation,
+    cornerRadius: Dp = 20.dp,
+    glassAlpha: Float = 0.95f,   // legacy param - ignored in fresh UI
+    elevation: Dp = 2.dp,        // legacy param - we use Material default
     content: @Composable BoxScope.() -> Unit
 ) {
-    val shape = RoundedCornerShape(cornerRadius)
-
-    Box(
-        modifier = modifier
-            // 3D floating shadow (ambient + spot for depth); applied before the clip
-            // so it renders fully outside the rounded outline.
-            .shadow(
-                elevation = elevation,
-                shape = shape,
-                ambientColor = ClearColors.glassShadow,
-                spotColor = if (ClearColors.useGlass) Color.Black.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.45f)
-            )
-            .clip(shape)
-            // Main frosted glass layer (or solid dark panel if useGlass is false)
-            .background(
-                color = if (ClearColors.useGlass) ClearColors.glass.copy(alpha = glassAlpha) else ClearColors.glass,
-                shape = shape
-            )
-            // Glass edge / refraction border (or 3D red aura border)
-            .border(
-                width = if (ClearColors.useGlass) 1.25.dp else 1.5.dp,
-                brush = if (ClearColors.useGlass) {
-                    if (ClearColors.glassBorder.alpha > 0.2f) {
-                        Brush.verticalGradient(
-                            0f to ClearColors.glassBorder,
-                            0.4f to ClearColors.glassBorder.copy(alpha = ClearColors.glassBorder.alpha * 0.5f),
-                            1f to Color.Black.copy(alpha = 0.03f)
-                        )
-                    } else {
-                        Brush.verticalGradient(
-                            0f to Color.White.copy(alpha = 0.15f),
-                            0.5f to ClearColors.green.copy(alpha = 0.18f),
-                            1f to Color.Black.copy(alpha = 0.35f)
-                        )
-                    }
-                } else {
-                    Brush.verticalGradient(
-                        0f to ClearColors.green.copy(alpha = 0.40f),
-                        0.25f to ClearColors.green.copy(alpha = 0.10f),
-                        0.75f to Color.Transparent,
-                        1f to ClearColors.green.copy(alpha = 0.05f)
-                    )
-                },
-                shape = shape
-            )
-    ) {
-        // Inner 3D bevel / specular highlight layer (top shine + bottom soft shadow)
-        if (ClearColors.useGlass) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clip(shape)
-                    .background(
-                        brush = Brush.verticalGradient(
-                            0f to ClearColors.glassHighlight,
-                            0.18f to Color.White.copy(alpha = 0.08f),
-                            0.42f to Color.Transparent,
-                            0.78f to Color.Black.copy(alpha = 0.035f),
-                            1f to Color.Black.copy(alpha = 0.07f)
-                        )
-                    )
-            )
-        } else {
-            // Physical 3D dark bevel highlights
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clip(shape)
-                    .background(
-                        brush = Brush.verticalGradient(
-                            0f to Color.White.copy(alpha = 0.03f),
-                            0.10f to Color.Transparent,
-                            0.90f to Color.Transparent,
-                            1f to Color.Black.copy(alpha = 0.45f)
-                        )
-                    )
-            )
-        }
-
-        // Actual content. Text and icons that do not set an explicit color inherit
-        // the palette's text color, so cards stay readable in both themes.
-        CompositionLocalProvider(LocalContentColor provides ClearColors.text) {
-            Box(content = content)
-        }
-    }
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(cornerRadius),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
+        content = content
+    )
 }
 
-/**
- * Slightly more "pressed" or lower elevation glass variant for lists / dense content.
- */
+/** Compatibility shims — delegate to the clean GlassCard */
 @Composable
 fun GlassCardCompact(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
-) {
-    GlassCard(
-        modifier = modifier,
-        cornerRadius = ClearDesign.compactCorner,
-        glassAlpha = ClearDesign.compactGlassAlpha,
-        elevation = ClearDesign.compactElevation,
-        content = content
-    )
-}
+) = GlassCard(modifier = modifier, cornerRadius = 16.dp, content = content)
 
-/**
- * Prominent 3D glass surface (used for hero toggle, big stats).
- */
 @Composable
 fun GlassCardHero(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
+) = GlassCard(modifier = modifier, cornerRadius = 24.dp, content = content)
+
+@Composable
+fun GlassCardInteractive(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 20.dp,
+    content: @Composable BoxScope.() -> Unit
 ) {
-    GlassCard(
-        modifier = modifier,
-        cornerRadius = ClearDesign.heroCorner,
-        glassAlpha = ClearDesign.heroGlassAlpha,
-        elevation = ClearDesign.heroElevation,
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.985f else 1f,
+        animationSpec = tween(120),
+        label = "cardPressScale"
+    )
+
+    Card(
+        onClick = onClick,
+        modifier = modifier.scale(scale),
+        shape = RoundedCornerShape(cornerRadius),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        interactionSource = interactionSource,
         content = content
     )
 }
 
 /**
- * Tappable glass card with press-down feedback (scale, elevation, brightness).
+ * Classy, minimal section header used throughout the clean UI.
  */
 @Composable
-fun GlassCardInteractive(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    cornerRadius: Dp = ClearDesign.cardCorner,
-    content: @Composable BoxScope.() -> Unit
-) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
+fun AppSectionHeader(title: String, modifier: Modifier = Modifier) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier.padding(top = 8.dp, bottom = 4.dp)
+    )
+}
 
+/**
+ * Subtle press feedback for delightful interaction (very light scale, classy).
+ * Use on cards or rows for modern feel without old heavy effects.
+ */
+@Composable
+fun Modifier.subtlePressFeedback(): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = tween(ClearDesign.pressFeedbackMs),
-        label = "cardScale"
+        targetValue = if (isPressed) 0.99f else 1f,
+        animationSpec = tween(80),
+        label = "subtlePress"
     )
-    val elevation by animateDpAsState(
-        targetValue = if (pressed) 6.dp else ClearDesign.cardElevation,
-        animationSpec = tween(ClearDesign.pressFeedbackMs),
-        label = "cardElev"
-    )
-
-    GlassCard(
-        modifier = modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                onClick = onClick
-            ),
-        cornerRadius = cornerRadius,
-        elevation = elevation,
-        content = content
-    )
+    return this.scale(scale).clickable(interactionSource = interactionSource, indication = null) { }
 }

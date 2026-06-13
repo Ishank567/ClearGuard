@@ -53,9 +53,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import com.clearguard.app.PreferenceKeys
 import com.clearguard.app.blocking.HostBlocker
 import com.clearguard.app.ui.components.GlassCard
-import com.clearguard.app.ui.components.LiquidGlassButton
-import com.clearguard.app.ui.theme.ClearColors
-import com.clearguard.app.ui.theme.ClearDesign
+// LiquidGlassButton replaced by clean PrimaryButton / SecondaryButton in fresh UI
+// Using fresh MaterialTheme + standard components (old Clear* tokens removed)
 import com.clearguard.app.vpn.ClearGuardVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -132,7 +131,7 @@ fun ActivityScreen(isProtected: Boolean) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = ClearDesign.screenHPadding, vertical = 12.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -141,17 +140,13 @@ fun ActivityScreen(isProtected: Boolean) {
             ) {
                 Text("Recent Activity", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                 if (recent.isNotEmpty()) {
-                    LiquidGlassButton(
+                    SecondaryButton(
                         onClick = {
                             ClearGuardVpnService.clearRecentBlocked()
                             recent = ClearGuardVpnService.recentBlocked()
                             message = ""
                         },
-                        modifier = Modifier.height(36.dp),
-                        accent = ClearColors.muted,
-                        contentColor = ClearColors.muted,
-                        cornerRadius = 18.dp,
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                        modifier = Modifier.height(36.dp)
                     ) {
                         Text("Clear", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     }
@@ -163,7 +158,7 @@ fun ActivityScreen(isProtected: Boolean) {
             Text(
                 "DNS queries captured this session. Tap a row for details or to block/allow. Lives in memory only.",
                 fontSize = 12.sp,
-                color = ClearColors.muted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
             )
 
@@ -171,7 +166,7 @@ fun ActivityScreen(isProtected: Boolean) {
                 Text(
                     message,
                     fontSize = 12.sp,
-                    color = ClearColors.green,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)
                 )
             }
@@ -183,13 +178,13 @@ fun ActivityScreen(isProtected: Boolean) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(if (ClearColors.useGlass) ClearColors.glass.copy(alpha = 0.40f) else ClearColors.panel),
-                    placeholder = { Text("Search domain...", color = ClearColors.muted, fontSize = 14.sp) },
+                        .background(if (true) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface),
+                    placeholder = { Text("Search domain...", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = null,
-                            tint = ClearColors.muted,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
                     },
@@ -198,7 +193,7 @@ fun ActivityScreen(isProtected: Boolean) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Clear search",
-                                tint = ClearColors.muted,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
                                     .size(18.dp)
                                     .clickable { searchQuery = "" }
@@ -207,12 +202,12 @@ fun ActivityScreen(isProtected: Boolean) {
                     },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = ClearColors.green.copy(alpha = 0.6f),
-                        unfocusedBorderColor = ClearColors.border.copy(alpha = 0.25f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                         focusedContainerColor = Color.Transparent,
                         unfocusedContainerColor = Color.Transparent,
-                        focusedTextColor = ClearColors.text,
-                        unfocusedTextColor = ClearColors.text
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
 
@@ -226,21 +221,21 @@ fun ActivityScreen(isProtected: Boolean) {
                     chips.forEach { chip ->
                         val isSelected = filterStatus == chip
                         val chipColor = when (chip) {
-                            "Allowed" -> ClearColors.green
-                            "Blocked" -> ClearColors.blue
-                            "Threats" -> ClearColors.danger
-                            else -> ClearColors.text
+                            "Allowed" -> MaterialTheme.colorScheme.primary
+                            "Blocked" -> MaterialTheme.colorScheme.secondary
+                            "Threats" -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurface
                         }
                         val bgAlpha = if (isSelected) 0.18f else 0.05f
                         val borderAlpha = if (isSelected) 0.5f else 0.15f
-                        val textColor = if (isSelected) chipColor else ClearColors.muted
+                        val textColor = if (isSelected) chipColor else MaterialTheme.colorScheme.onSurfaceVariant
                         
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) chipColor.copy(alpha = bgAlpha) else (if (ClearColors.useGlass) ClearColors.glass.copy(alpha = 0.4f) else ClearColors.panel))
-                                .border(1.dp, if (isSelected) chipColor.copy(alpha = borderAlpha) else ClearColors.border.copy(alpha = borderAlpha), RoundedCornerShape(12.dp))
+                                .background(if (isSelected) chipColor.copy(alpha = bgAlpha) else (if (true) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface))
+                                .border(1.dp, if (isSelected) chipColor.copy(alpha = borderAlpha) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = borderAlpha), RoundedCornerShape(12.dp))
                                 .clickable { filterStatus = chip }
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.Center
@@ -270,7 +265,7 @@ fun ActivityScreen(isProtected: Boolean) {
                         Icon(
                             imageVector = if (isProtected) Icons.Default.CheckCircle else Icons.Default.Pause,
                             contentDescription = null,
-                            tint = if (isProtected) ClearColors.green else ClearColors.muted,
+                            tint = if (isProtected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(36.dp)
                         )
                         Spacer(Modifier.height(10.dp))
@@ -288,7 +283,7 @@ fun ActivityScreen(isProtected: Boolean) {
                                 "Start protection from Home to start capturing DNS query logs."
                             },
                             fontSize = 12.sp,
-                            color = ClearColors.muted,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -312,7 +307,7 @@ fun ActivityScreen(isProtected: Boolean) {
                         Text(
                             "No results found for search \"$searchQuery\" or filter \"$filterStatus\".",
                             fontSize = 12.sp,
-                            color = ClearColors.muted,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -392,11 +387,11 @@ private fun QueryRow(
     onBlock: () -> Unit
 ) {
     val statusColor = when (query.status) {
-        "allowed" -> ClearColors.green
-        "blocked" -> ClearColors.blue
-        "threat" -> ClearColors.danger
-        "bypass" -> ClearColors.warning
-        else -> ClearColors.muted
+        "allowed" -> MaterialTheme.colorScheme.primary
+        "blocked" -> MaterialTheme.colorScheme.secondary
+        "threat" -> MaterialTheme.colorScheme.error
+        "bypass" -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     val statusText = when (query.status) {
@@ -441,7 +436,7 @@ private fun QueryRow(
                 Text(
                     text = "$statusText • $whenLabel",
                     fontSize = 11.sp,
-                    color = if (query.status == "threat") ClearColors.danger else ClearColors.muted,
+                    color = if (query.status == "threat") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -450,22 +445,22 @@ private fun QueryRow(
             Spacer(Modifier.width(8.dp))
 
             if (!query.blocked) {
-                LiquidGlassButton(
+                SecondaryButton(
                     onClick = onBlock,
                     modifier = Modifier.height(32.dp),
-                    accent = ClearColors.danger,
-                    contentColor = ClearColors.danger,
+                    accent = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.error,
                     cornerRadius = 16.dp,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                 ) {
                     Text("Block", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
             } else {
-                LiquidGlassButton(
+                SecondaryButton(
                     onClick = onAllow,
                     modifier = Modifier.height(32.dp),
-                    accent = ClearColors.green,
-                    contentColor = ClearColors.green,
+                    accent = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.primary,
                     cornerRadius = 16.dp,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                 ) {
@@ -504,10 +499,10 @@ private fun DomainDetailPanel(
     }
 
     val categoryColor = when {
-        !query.blocked -> ClearColors.green
-        query.threatScore > 50 -> ClearColors.danger
-        query.threatScore > 0 -> ClearColors.warning
-        else -> ClearColors.blue
+        !query.blocked -> MaterialTheme.colorScheme.primary
+        query.threatScore > 50 -> MaterialTheme.colorScheme.error
+        query.threatScore > 0 -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.secondary
     }
 
     val ipHash = Math.abs(query.domain.hashCode())
@@ -535,7 +530,7 @@ private fun DomainDetailPanel(
                 Text(
                     text = "Shield Query Details",
                     fontSize = 13.sp,
-                    color = ClearColors.muted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
                 )
 
@@ -561,7 +556,7 @@ private fun DomainDetailPanel(
                 text = query.domain,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = ClearColors.text,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -581,7 +576,7 @@ private fun DomainDetailPanel(
                 DetailMetricBox(
                     label = "Reason / Trigger",
                     value = query.reason,
-                    accentColor = ClearColors.text,
+                    accentColor = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1.5f)
                 )
             }
@@ -591,7 +586,7 @@ private fun DomainDetailPanel(
             Text(
                 text = if (query.blocked) "DNS Sinkhole Simulation" else "DNS Resolution Simulation",
                 fontSize = 12.sp,
-                color = ClearColors.muted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(6.dp))
@@ -599,7 +594,7 @@ private fun DomainDetailPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(ClearColors.bg.copy(alpha = 0.5f))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -622,29 +617,29 @@ private fun DomainDetailPanel(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                LiquidGlassButton(
+                SecondaryButton(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
-                    accent = ClearColors.muted,
-                    contentColor = ClearColors.muted
+                    accent = MaterialTheme.colorScheme.onSurfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 ) {
                     Text("Close", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 }
                 if (query.blocked) {
-                    LiquidGlassButton(
+                    SecondaryButton(
                         onClick = onAllow,
                         modifier = Modifier.weight(1.5f),
-                        accent = ClearColors.green,
-                        contentColor = ClearColors.green
+                        accent = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.primary
                     ) {
                         Text("Allow Domain", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     }
                 } else {
-                    LiquidGlassButton(
+                    SecondaryButton(
                         onClick = onBlock,
                         modifier = Modifier.weight(1.5f),
-                        accent = ClearColors.danger,
-                        contentColor = ClearColors.danger
+                        accent = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.error
                     ) {
                         Text("Block Domain", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     }
@@ -664,11 +659,11 @@ private fun DetailMetricBox(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(ClearColors.bg.copy(alpha = 0.5f))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
             .padding(12.dp)
     ) {
         Column {
-            Text(text = label, fontSize = 11.sp, color = ClearColors.muted)
+            Text(text = label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(2.dp))
             Text(
                 text = value,
@@ -688,7 +683,7 @@ private fun RecordRow(label: String, value: String) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, fontSize = 11.sp, color = ClearColors.muted)
-        Text(text = value, fontSize = 11.sp, color = ClearColors.text, fontWeight = FontWeight.Medium)
+        Text(text = label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = value, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
     }
 }

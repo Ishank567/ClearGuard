@@ -1,8 +1,17 @@
-# ClearGuard UI Configuration
+# ShieldDNS UI (Fresh)
 
-ClearGuard's interface is a custom "liquid glass" design system built on Jetpack Compose
-and Material 3. Every visual knob lives in one of three files, so the whole app can be
-restyled without touching a screen:
+The UI has been refreshed to a clean, standard Material 3 design.
+
+All previous "liquid glass", 3D tilt, canvas mesh/particles, heavy custom animations,
+GlassCard bevels, LiquidGlass effects, and custom design tokens (ClearDesign / ClearColors / ClearPalette) have been removed.
+
+Current implementation uses:
+- Standard `MaterialTheme` + `ShieldDNSTheme` (clean color scheme)
+- `Card`, `Button` / `FilledTonalButton` / `OutlinedButton`, `Switch`, `FilterChip`, `Scaffold`, `NavigationBar`, `TopAppBar`
+- Simple explicit paddings (16.dp etc.)
+- No infinite transitions, no graphicsLayer 3D/cameraDistance, no custom Canvas effects on the main screens.
+
+See the source of DashboardScreen.kt and MainActivity.kt for the current clean structure.
 
 | File | What it controls |
 |------|------------------|

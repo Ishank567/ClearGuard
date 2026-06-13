@@ -37,13 +37,10 @@ val InterFontFamily = FontFamily(
 )
 
 /**
- * ClearGuard Material 3 typography scale built on Inter.
- *
- * Every text style in the app inherits this font family, so components
- * like `Text()` automatically render in Inter without needing per-call
- * `fontFamily` overrides.
+ * Clean Material 3 typography scale built on Inter (modern, highly legible).
+ * Used by the fresh ShieldDNSTheme.
  */
-val ClearTypography = Typography(
+val AppTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = InterFontFamily,
         fontWeight = FontWeight.Bold,
