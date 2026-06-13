@@ -55,7 +55,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.foundation.Image
@@ -97,24 +100,28 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PreferenceKeys.ensureDefaults(this)
-        HostBlocker.get(this).reload()
-        BlocklistUpdateWorker.sync(this)
 
-        // Initialize on-device rule engine + TFLite phishing classifier (lightweight, safe to call early)
-        com.clearguard.app.security.PhishingClassifier.initialize(this)
+        // Heavy startup work (blocklist parse, WorkManager DB init on first launch, asset/model
+        // loads, RASP /proc probes) must NOT run on the main thread: doing it synchronously before
+        // the first frame blocks the UI thread and triggers a launch ANR. None of it is needed to
+        // render the initial UI, so kick it off the main thread.
+        lifecycleScope.launch(Dispatchers.IO) {
+            HostBlocker.get(this@MainActivity).reload()
+            BlocklistUpdateWorker.sync(this@MainActivity)
 
-        // Load real small FRI risk DB from assets + auto-seed (for Mobile Number Risk Scoring API)
-        com.clearguard.app.security.OnDeviceRuleEngine.loadLocalFRIDB(this)
+            // On-device rule engine + TFLite phishing classifier (no-ops gracefully if absent).
+            com.clearguard.app.security.PhishingClassifier.initialize(this@MainActivity)
 
-        // RASP + Anti-tamper check (stub for high-complexity feature)
-        if (com.clearguard.app.PreferenceKeys.prefs(this).getBoolean(
-                com.clearguard.app.PreferenceKeys.KEY_RASP_ENABLED,
-                com.clearguard.app.PreferenceKeys.DEFAULT_RASP_ENABLED
-            )) {
-            val raspReport = com.clearguard.app.security.RaspGuard.checkIntegrity(this)
-            com.clearguard.app.security.RaspGuard.logReport(raspReport)
-            if (raspReport.score > 60) {
-                // In production: show warning or exit. For now log.
+            // Small FRI risk DB from assets + auto-seed (Mobile Number Risk Scoring).
+            com.clearguard.app.security.OnDeviceRuleEngine.loadLocalFRIDB(this@MainActivity)
+
+            // RASP + Anti-tamper check (opt-in). Reads /proc/self/maps, so keep it off the UI thread.
+            if (com.clearguard.app.PreferenceKeys.prefs(this@MainActivity).getBoolean(
+                    com.clearguard.app.PreferenceKeys.KEY_RASP_ENABLED,
+                    com.clearguard.app.PreferenceKeys.DEFAULT_RASP_ENABLED
+                )) {
+                val raspReport = com.clearguard.app.security.RaspGuard.checkIntegrity(this@MainActivity)
+                com.clearguard.app.security.RaspGuard.logReport(raspReport)
             }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
