@@ -1537,8 +1537,12 @@ fun ScamScreenshotScanner(initialText: String? = null) {
             scope.launch {
                 isAnalyzing = true
                 try {
+                    // Decode the picked image off the main thread — full-size screenshots can be
+                    // several megapixels and decoding them on the UI thread froze the scanner.
                     @Suppress("DEPRECATION")
-                    val bmp = MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                    val bmp = withContext(Dispatchers.IO) {
+                        MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                    }
                     bitmap = bmp
 
                     // Run on-device OCR + Indian Scam Shield analysis
