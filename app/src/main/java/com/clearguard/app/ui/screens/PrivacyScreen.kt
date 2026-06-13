@@ -1155,17 +1155,30 @@ fun AnalyticsTab(
 }
 
 // === TAB 3: App Privacy Audit & Invisible Tracker Map ===
+// Caps for the Privacy Audit tab. It renders inside a non-lazy verticalScroll Column, so the
+// per-app cards and the per-connection Canvas links must stay bounded regardless of how long the
+// VPN has been running and how many unique tracker domains it has observed.
+private const val MAX_AUDIT_APPS = 40
+private const val MAX_TRACKER_CONNECTIONS = 60
+
 @Composable
 fun AppAuditTab() {
     val context = LocalContext.current
     var stats by remember { mutableStateOf(emptyList<ClearGuardVpnService.AppStats>()) }
     var trackerConnections by remember { mutableStateOf(emptyList<ClearGuardVpnService.TrackerConnection>()) }
 
-    // Fetch Stats
+    // Fetch Stats. Both lists are rendered inside a non-lazy verticalScroll Column (and the
+    // tracker list also drives one Canvas line per connection), so they must be bounded — the
+    // tracker set grows with every unique domain the VPN sees and was freezing this screen
+    // "after a while". Show only the most active entries.
     LaunchedEffect(Unit) {
         while (true) {
-            stats = ClearGuardVpnService.getAppPrivacyStats().sortedByDescending { it.blockedQueries }
+            stats = ClearGuardVpnService.getAppPrivacyStats()
+                .sortedByDescending { it.blockedQueries }
+                .take(MAX_AUDIT_APPS)
             trackerConnections = ClearGuardVpnService.getTrackerConnections()
+                .sortedByDescending { it.count }
+                .take(MAX_TRACKER_CONNECTIONS)
             kotlinx.coroutines.delay(2000L)
         }
     }
