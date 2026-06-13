@@ -23,6 +23,7 @@ import android.os.SystemClock;
 import com.clearguard.app.MainActivity;
 import com.clearguard.app.PreferenceKeys;
 import com.clearguard.app.blocking.HostBlocker;
+import com.clearguard.app.security.AdPatternDetector;
 import com.clearguard.app.security.DnsBypassGuard;
 import com.clearguard.app.security.ScamDetector;
 
@@ -90,6 +91,8 @@ public final class ClearGuardVpnService extends VpnService {
     private long cacheHitTotal;
     private long scamBlockedTotal;
     private long scamBlockedToday;
+    private long adPatternBlockedTotal;
+    private long adPatternBlockedToday;
     private long upstreamQueryTotal;
     private long dohQueryTotal;
     private long dohFallbackTotal;
@@ -97,6 +100,7 @@ public final class ClearGuardVpnService extends VpnService {
     private long pendingBlocked;
     private long pendingCacheHits;
     private long pendingScamBlocked;
+    private long pendingAdPatternBlocked;
     private long pendingUpstreamQueries;
     private long pendingDohQueries;
     private long pendingDohFallbacks;
@@ -194,6 +198,8 @@ public final class ClearGuardVpnService extends VpnService {
         cacheHitTotal = prefs.getLong(PreferenceKeys.KEY_CACHE_HIT_COUNT, 0L);
         scamBlockedTotal = prefs.getLong(PreferenceKeys.KEY_SCAM_BLOCKED_COUNT, 0L);
         scamBlockedToday = prefs.getLong(PreferenceKeys.KEY_SCAM_BLOCKED_TODAY, 0L);
+        adPatternBlockedTotal = prefs.getLong(PreferenceKeys.KEY_AI_AD_PATTERN_BLOCKED_COUNT, 0L);
+        adPatternBlockedToday = prefs.getLong(PreferenceKeys.KEY_AI_AD_PATTERN_BLOCKED_TODAY, 0L);
         upstreamQueryTotal = prefs.getLong(PreferenceKeys.KEY_UPSTREAM_QUERY_COUNT, 0L);
         dohQueryTotal = prefs.getLong(PreferenceKeys.KEY_DOH_QUERY_COUNT, 0L);
         dohFallbackTotal = prefs.getLong(PreferenceKeys.KEY_DOH_FALLBACK_COUNT, 0L);
@@ -520,6 +526,7 @@ public final class ClearGuardVpnService extends VpnService {
         if (dnsResponse == null) {
             String currentMode = prefs.getString(PreferenceKeys.KEY_PROTECTION_MODE, PreferenceKeys.DEFAULT_PROTECTION_MODE);
             ScamDetector.Result scamThreat = scamThreat(question.name, currentMode);
+            AdPatternDetector.Result adPatternThreat = adPatternThreat(question.name, currentMode);
             if (blocker.shouldBlock(question.name)) {
                 dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
                 if (blocker.isSecurityBlock(question.name)) {
@@ -535,6 +542,9 @@ public final class ClearGuardVpnService extends VpnService {
             } else if (scamThreat != null && scamThreat.blocked) {
                 dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
                 recordScamBlocked(question.name, scamThreat, appInfo.name, appInfo.packageName);
+            } else if (adPatternThreat != null && adPatternThreat.blocked) {
+                dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+                recordAdPatternBlocked(question.name, adPatternThreat, appInfo.name, appInfo.packageName);
             } else {
                 dnsResponse = responseCache.get(question.cacheKey(), question.id);
                 if (dnsResponse == null) {
@@ -759,11 +769,13 @@ public final class ClearGuardVpnService extends VpnService {
         }
         countBlockedDomain(domain);
         String displayReason = threat.reason;
-        // Dedicated Indian Scam Shield prefix for the 9 categories (reason-based, no extra state needed)
+        // Dedicated Indian Scam Shield prefix for the 11 categories (reason-based, no extra state needed)
         String r = threat.reason.toLowerCase(java.util.Locale.US);
         if (r.contains("upi kyc") || r.contains("electricity bill") || r.contains("courier delivery") ||
             r.contains("loan approval") || r.contains("job registration") || r.contains("government scheme") ||
-            r.contains("investment group") || r.contains("apk download") || r.contains("customer care")) {
+            r.contains("investment group") || r.contains("apk download") || r.contains("customer care") ||
+            r.contains("digital arrest") || r.contains("fake authority") ||
+            r.contains("festival") || r.contains("seasonal offer")) {
             displayReason = "Indian Scam Shield: " + threat.reason;
         }
 
@@ -779,6 +791,32 @@ public final class ClearGuardVpnService extends VpnService {
         } catch (Exception ignored) {}
 
         addRecentQuery(domain, "Scam shield: " + displayReason, threat.score, true, "threat", -1, appName, appPackage);
+        trackPrivacyStats(appPackage, appName, domain, true);
+        flushStats(false);
+    }
+
+    private AdPatternDetector.Result adPatternThreat(String domain, String protectionMode) {
+        if (!prefs.getBoolean(
+                PreferenceKeys.KEY_AI_AD_PATTERN_DETECTOR_ENABLED,
+                PreferenceKeys.DEFAULT_AI_AD_PATTERN_DETECTOR_ENABLED)) {
+            return null;
+        }
+        if (blocker.isAllowed(domain)) {
+            return null;
+        }
+        boolean regionalIndia = prefs.getBoolean(
+                PreferenceKeys.KEY_REGIONAL_PACK_INDIA,
+                PreferenceKeys.DEFAULT_REGIONAL_PACK_INDIA);
+        return AdPatternDetector.analyze(domain, protectionMode, regionalIndia);
+    }
+
+    private void recordAdPatternBlocked(String domain, AdPatternDetector.Result threat, String appName, String appPackage) {
+        synchronized (statsLock) {
+            pendingBlocked++;
+            pendingAdPatternBlocked++;
+        }
+        countBlockedDomain(domain);
+        addRecentQuery(domain, "AI ad pattern: " + threat.reason, threat.score, true, "blocked", -1, appName, appPackage);
         trackPrivacyStats(appPackage, appName, domain, true);
         flushStats(false);
     }
@@ -881,6 +919,8 @@ public final class ClearGuardVpnService extends VpnService {
             cacheHitTotal += pendingCacheHits;
             scamBlockedTotal += pendingScamBlocked;
             scamBlockedToday += pendingScamBlocked;
+            adPatternBlockedTotal += pendingAdPatternBlocked;
+            adPatternBlockedToday += pendingAdPatternBlocked;
             upstreamQueryTotal += pendingUpstreamQueries;
             dohQueryTotal += pendingDohQueries;
             dohFallbackTotal += pendingDohFallbacks;
@@ -889,6 +929,7 @@ public final class ClearGuardVpnService extends VpnService {
             pendingBlocked = 0;
             pendingCacheHits = 0;
             pendingScamBlocked = 0;
+            pendingAdPatternBlocked = 0;
             pendingUpstreamQueries = 0;
             pendingDohQueries = 0;
             pendingDohFallbacks = 0;
@@ -902,6 +943,8 @@ public final class ClearGuardVpnService extends VpnService {
                     .putLong(PreferenceKeys.KEY_CACHE_HIT_COUNT, cacheHitTotal)
                     .putLong(PreferenceKeys.KEY_SCAM_BLOCKED_COUNT, scamBlockedTotal)
                     .putLong(PreferenceKeys.KEY_SCAM_BLOCKED_TODAY, scamBlockedToday)
+                    .putLong(PreferenceKeys.KEY_AI_AD_PATTERN_BLOCKED_COUNT, adPatternBlockedTotal)
+                    .putLong(PreferenceKeys.KEY_AI_AD_PATTERN_BLOCKED_TODAY, adPatternBlockedToday)
                     .putString(PreferenceKeys.KEY_LAST_BLOCK_DAY, lastBlockDay)
                     .putFloat(PreferenceKeys.KEY_UPSTREAM_AVERAGE_LATENCY_MS, upstreamAverageLatencyMs)
                     .putLong(PreferenceKeys.KEY_UPSTREAM_QUERY_COUNT, upstreamQueryTotal)
@@ -963,6 +1006,7 @@ public final class ClearGuardVpnService extends VpnService {
         if (!today.equals(lastBlockDay)) {
             blockedToday = 0;
             scamBlockedToday = 0;
+            adPatternBlockedToday = 0;
             lastBlockDay = today;
         }
     }

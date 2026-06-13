@@ -18,8 +18,15 @@ public final class PreferenceKeys {
     public static final String KEY_ALLOWED_COUNT = "allowed_count";
     public static final String KEY_BLOCKED_COUNT = "blocked_count";
     public static final String KEY_BLOCKED_TODAY = "blocked_today";
+    public static final String KEY_ALLOWED_TODAY = "allowed_today";
     public static final String KEY_CACHE_HIT_COUNT = "cache_hit_count";
     public static final String KEY_LAST_BLOCK_DAY = "last_block_day";
+    /**
+     * JSON array of finished-day rollups [{ "date":"yyyy-MM-dd", "blocked":N, "allowed":N }, ...],
+     * appended by the VPN service on each day rollover. Last ~14 entries are kept; drives the
+     * weekly Query Volume chart on the Statistics screen.
+     */
+    public static final String KEY_DAILY_HISTORY_JSON = "daily_history_json";
     public static final String KEY_ALLOWLIST = "allowlist";
     public static final String KEY_CACHE_TTL_SECONDS = "cache_ttl_seconds";
     public static final String KEY_CUSTOM_BLOCKS = "custom_blocks";
@@ -87,7 +94,7 @@ public final class PreferenceKeys {
     public static final String KEY_PROTECTION_MODE = "protection_mode";
     public static final String DEFAULT_PROTECTION_MODE = "default";
 
-    /** Dedicated Indian Scam Shield - targeted protection for the 9 common India-specific scams. */
+    /** Dedicated Indian Scam Shield - targeted protection for the 11 common India-specific scams (incl. digital arrest, festival offers). */
     public static final String KEY_INDIAN_SCAM_SHIELD_ENABLED = "indian_scam_shield_enabled";
     public static final boolean DEFAULT_INDIAN_SCAM_SHIELD_ENABLED = true;
 
@@ -96,12 +103,18 @@ public final class PreferenceKeys {
     public static final String KEY_PHISHING_TFLITE_ENABLED = "phishing_tflite_enabled";
     public static final boolean DEFAULT_ON_DEVICE_RULE_ENGINE_ENABLED = true;
     public static final boolean DEFAULT_PHISHING_TFLITE_ENABLED = false;  // off by default until model is provided in assets
+    public static final String KEY_AI_AD_PATTERN_DETECTOR_ENABLED = "ai_ad_pattern_detector_enabled";
+    public static final String KEY_AI_AD_PATTERN_BLOCKED_COUNT = "ai_ad_pattern_blocked_count";
+    public static final String KEY_AI_AD_PATTERN_BLOCKED_TODAY = "ai_ad_pattern_blocked_today";
+    public static final boolean DEFAULT_AI_AD_PATTERN_DETECTOR_ENABLED = true;
 
     // New advanced features from roadmap
     public static final String KEY_MOBILE_RISK_SCORING_ENABLED = "mobile_risk_scoring_enabled";
+    public static final String KEY_SAFE_PAYMENT_CHECKS_ENABLED = "safe_payment_checks_enabled";
     public static final String KEY_UPI_PAYEE_VERIFICATION_ENABLED = "upi_payee_verification_enabled";
     public static final String KEY_RASP_ENABLED = "rasp_enabled";
     public static final boolean DEFAULT_MOBILE_RISK_SCORING_ENABLED = true;
+    public static final boolean DEFAULT_SAFE_PAYMENT_CHECKS_ENABLED = true;
     public static final boolean DEFAULT_UPI_PAYEE_VERIFICATION_ENABLED = true;
     public static final boolean DEFAULT_RASP_ENABLED = false; // high complexity, opt-in
 
@@ -112,6 +125,25 @@ public final class PreferenceKeys {
     /** Configurable endpoint for remote FRI/operator signals (default is stub). */
     public static final String KEY_FRI_REMOTE_ENDPOINT = "fri_remote_endpoint";
     public static final String DEFAULT_FRI_REMOTE_ENDPOINT = "https://api.example-fri.gov.in/v1/risk";
+    public static final String KEY_HMAC_SEED = "hmac_seed";
+    public static final String KEY_REMOTE_API_KEY = "remote_api_key";
+
+    // Spam Call Filter (CallScreeningService + ROLE_CALL_SCREENING, Android 10+)
+    public static final String KEY_CALL_SCREENING_ENABLED = "call_screening_enabled";
+    public static final boolean DEFAULT_CALL_SCREENING_ENABLED = false; // requires user-granted role
+    /** When true, high-risk calls are rejected outright; when false they are silenced. */
+    public static final String KEY_CALL_SCREENING_REJECT = "call_screening_reject";
+    public static final boolean DEFAULT_CALL_SCREENING_REJECT = false;
+    public static final String KEY_SPAM_CALLS_BLOCKED = "spam_calls_blocked_total";
+
+    /**
+     * Anti "digital arrest" / spoofed-caller defense: silence incoming calls that carry a non-Indian
+     * (foreign) country code. Fake CBI/police/customs calls almost always originate from international
+     * numbers. Opt-in (default off) because it also silences legitimate overseas callers (e.g. NRIs).
+     */
+    public static final String KEY_WARN_INTERNATIONAL_CALLS = "warn_international_calls";
+    public static final boolean DEFAULT_WARN_INTERNATIONAL_CALLS = false;
+    public static final String KEY_INTL_CALLS_SCREENED = "intl_calls_screened_total";
 
     public static final int DEFAULT_CACHE_TTL_SECONDS = 300;
     public static final boolean DEFAULT_SCAM_SHIELD_ENABLED = true;
@@ -202,8 +234,16 @@ public final class PreferenceKeys {
             editor.putBoolean(KEY_PHISHING_TFLITE_ENABLED, DEFAULT_PHISHING_TFLITE_ENABLED);
             changed = true;
         }
+        if (!prefs.contains(KEY_AI_AD_PATTERN_DETECTOR_ENABLED)) {
+            editor.putBoolean(KEY_AI_AD_PATTERN_DETECTOR_ENABLED, DEFAULT_AI_AD_PATTERN_DETECTOR_ENABLED);
+            changed = true;
+        }
         if (!prefs.contains(KEY_MOBILE_RISK_SCORING_ENABLED)) {
             editor.putBoolean(KEY_MOBILE_RISK_SCORING_ENABLED, DEFAULT_MOBILE_RISK_SCORING_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_SAFE_PAYMENT_CHECKS_ENABLED)) {
+            editor.putBoolean(KEY_SAFE_PAYMENT_CHECKS_ENABLED, DEFAULT_SAFE_PAYMENT_CHECKS_ENABLED);
             changed = true;
         }
         if (!prefs.contains(KEY_MOBILE_RISK_REMOTE_SIGNALS)) {
@@ -316,6 +356,10 @@ public final class PreferenceKeys {
         }
         if (!prefs.contains(KEY_PROTECTION_MODE)) {
             editor.putString(KEY_PROTECTION_MODE, DEFAULT_PROTECTION_MODE);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_WARN_INTERNATIONAL_CALLS)) {
+            editor.putBoolean(KEY_WARN_INTERNATIONAL_CALLS, DEFAULT_WARN_INTERNATIONAL_CALLS);
             changed = true;
         }
 
@@ -470,7 +514,7 @@ public final class PreferenceKeys {
             case "study": return "Blocks YouTube recs, reels, distracting popups for focus";
             case "work": return "Hides social widgets, notification trackers, chat popups";
             case "kids": return "Strong blocks for adult, gambling, violent, scam content";
-            case "elder": return "Protects against fake banks, loans, KYC, medicine, APK scams + full Indian Scam Shield (9 categories)";
+            case "elder": return "Protects against fake banks, loans, KYC, medicine, APK scams, digital-arrest calls + full Indian Scam Shield (11 categories)";
             case "shopping": return "Kills fake discounts, aggressive trackers, coupon scams";
             case "spiritual": return "Satvik/Dharma Clean — removes vulgar, gambling, political, dating ads on scripture & bhakti sites";
             case "battery": return "Aggressive media ad + background tracker blocking to save power/data";

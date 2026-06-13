@@ -10,7 +10,7 @@ composeBom = "2026.05.01"
 workManager = "2.11.2"
 okhttp = "5.4.0"
 mlkitText = "16.0.1"
-tensorflowLite = "2.16.1"
+tensorflowLite = "2.17.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

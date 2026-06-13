@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
@@ -36,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -43,6 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import com.clearguard.app.R
 import com.clearguard.app.PreferenceKeys
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.GlassCardHero
@@ -53,10 +59,15 @@ import com.clearguard.app.ui.theme.ClearDesign
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.foundation.Canvas
-import androidx.compose.ui.geometry.Offset
 import kotlin.math.cos
 import kotlin.math.sin
+
+private data class ShieldProfile(
+    val label: String,
+    val icon: ImageVector,
+    val enabled: Boolean,
+    val accent: Color
+)
 
 @Composable
 fun DashboardScreen(
@@ -75,7 +86,64 @@ fun DashboardScreen(
         label = "blockedToday"
     )
 
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val prefs = remember { PreferenceKeys.prefs(context) }
+    var currentMode by remember { mutableStateOf(PreferenceKeys.getCurrentMode(context)) }
+
+    val adaptiveThreatScore = remember(blockedToday, scamBlockedToday, cacheHits, upstreamQueries, isProtected, currentMode, scamShieldEnabled) {
+        val base = ((blockedToday / 6) + (scamBlockedToday.toInt() * 3) + (cacheHits / 120L).toInt() + (upstreamQueries / 150L).toInt())
+        val modeBoost = when (currentMode) {
+            "elder" -> 10
+            "kids" -> 8
+            "shopping" -> 6
+            "study", "work" -> 4
+            "battery" -> 0
+            else -> 2
+        }
+        val shieldBoost = if (isProtected) 8 else 0
+        val scamBoost = if (scamShieldEnabled) 6 else 0
+        (base + modeBoost + shieldBoost + scamBoost).coerceIn(0, 100)
+    }
+
+    val threatPulseLabel = when {
+        adaptiveThreatScore >= 75 -> "Critical pulse"
+        adaptiveThreatScore >= 50 -> "Elevated pulse"
+        else -> "Calm pulse"
+    }
+    val threatPulseTone = when {
+        adaptiveThreatScore >= 75 -> ClearColors.danger
+        adaptiveThreatScore >= 50 -> ClearColors.warning
+        else -> ClearColors.green
+    }
+    val threatPulseAdvice = when {
+        adaptiveThreatScore >= 75 -> "Your session is under heavy scam pressure. Boost Elder or Shopping mode for extra guardrails."
+        adaptiveThreatScore >= 50 -> "Ad traffic is active and scam signals are rising. Keep the shield on and use the smart mode coach."
+        else -> "Protection looks steady. You can keep current mode for a lighter, faster browsing flow."
+    }
+    val smartModeSuggestion = when {
+        currentMode == "elder" || adaptiveThreatScore >= 75 -> "Elder mode is ideal right now — it adds the strongest scam and fake-bank protection."
+        currentMode == "shopping" || adaptiveThreatScore >= 55 -> "Shopping mode will help cut fake discounts, redirect chains, and tracker-heavy pages."
+        currentMode == "kids" -> "Kids mode is tuned for safer, cleaner browsing with adult-content and scam filters."
+        currentMode == "battery" -> "Battery mode keeps the stack light while still protecting your core DNS path."
+        else -> "Default mode is balanced for everyday privacy protection."
+    }
+
+    val recommendedMode = when {
+        adaptiveThreatScore >= 75 -> "elder"
+        adaptiveThreatScore >= 55 -> "shopping"
+        currentMode == "kids" -> "kids"
+        else -> currentMode
+    }
+
+    val scoreReasons = listOfNotNull(
+        if (blockedToday >= 120) "Live block volume is unusually high right now." else null,
+        if (scamBlockedToday >= 4L) "Recent scam detections are pushing the threat meter upward." else null,
+        if (!isProtected) "Protection is paused, which lowers the active shield level." else null,
+        if (!scamShieldEnabled) "The scam shield toggle is currently off." else null,
+        if (cacheHits > upstreamQueries) "Cache efficiency is helping keep the protection path smooth." else null,
+        if (adaptiveThreatScore >= 55) "The current session looks more exposed to deceptive content and redirects." else null
+    ).takeIf { it.isNotEmpty() } ?: listOf("Your setup is balanced, and the current mode is holding steady.")
 
     Column(
         modifier = Modifier
@@ -85,127 +153,117 @@ fun DashboardScreen(
             .padding(top = 8.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(ClearDesign.cardSpacing)
     ) {
-        // === HERO SECTION — closely matching the reference image ===
-        // Deep glass card with the big glowing shield + status + primary action
-        GlassCardHero(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(260.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
-            ) {
-                // Large 3D shield using the official logo + extra cyber glow (reference style)
-                val shieldGlow = rememberInfiniteTransition(label = "shieldGlow")
-                val glowScale by shieldGlow.animateFloat(
-                    initialValue = 0.96f,
-                    targetValue = 1.08f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(2200, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "glowScale"
-                )
+        // === HERO SECTION — central protection ring (ref: Vanda VPN glassmorphism) ===
+        ProtectionRingHero(
+            isProtected = isProtected,
+            blockedToday = animatedBlockedToday,
+            onToggle = { onToggleProtection(!isProtected) },
+            onCreateProfile = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                Toast.makeText(
+                    context,
+                    "Profile presets are on the roadmap. Use the shield controls and settings to tailor protection today.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        )
 
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text("Adaptive Threat Pulse", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
+                Text(
+                    text = "On-device threat intelligence that adapts to current session pressure and protection mode.",
+                    fontSize = 11.sp,
+                    color = ClearColors.muted,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Session risk", fontSize = 12.sp, color = ClearColors.muted)
+                        Text(
+                            text = adaptiveThreatScore.toString(),
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = threatPulseTone
+                        )
+                        Text(text = threatPulseLabel, fontSize = 11.sp, color = ClearColors.text)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(threatPulseTone.copy(alpha = 0.10f))
+                            .border(1.dp, threatPulseTone.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                    ) {
+                        Text(text = "Local AI pulse", fontSize = 11.sp, color = threatPulseTone, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 8.dp)
-                        .size(118.dp)
-                        .graphicsLayer {
-                            scaleX = glowScale
-                            scaleY = glowScale
-                            // Gentle 3D tilt like the floating elements in the reference
-                            rotationX = if (isProtected) -6f else 4f
-                            rotationY = if (isProtected) 9f else -5f
-                            cameraDistance = 8f
-                        },
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(ClearColors.border.copy(alpha = 0.25f))
                 ) {
-                    // Strong cyan/teal outer glow (exactly like the reference phone UI)
-                    if (isProtected) {
-                        Box(
-                            modifier = Modifier
-                                .size(128.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    brush = Brush.radialGradient(
-                                        listOf(ClearColors.blue.copy(alpha = 0.35f), Color.Transparent)
-                                    )
-                                )
-                        )
-                    }
-
-                    // The official logo (big, crisp, with extra metallic/glass treatment)
-                    Image(
-                        painter = painterResource(id = R.drawable.shield_dns_logo),
-                        contentDescription = "ShieldDNS",
+                    Box(
                         modifier = Modifier
-                            .size(112.dp)
-                            .graphicsLayer {
-                                // extra specular pop
-                                alpha = if (isProtected) 1f else 0.7f
-                            },
-                        contentScale = ContentScale.Fit
+                            .fillMaxWidth(adaptiveThreatScore / 100f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Brush.horizontalGradient(listOf(threatPulseTone, ClearColors.blue)))
                     )
                 }
 
-                // Text block (left-aligned like many modern apps, or centered for hero feel)
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(bottom = 64.dp),
-                    horizontalAlignment = Alignment.Start
+                Spacer(Modifier.height(10.dp))
+                Text(text = threatPulseAdvice, fontSize = 11.sp, color = ClearColors.text)
+                Spacer(Modifier.height(8.dp))
+                Text("Why this score?", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
+                scoreReasons.forEach { reason ->
+                    Text("• $reason", fontSize = 10.5.sp, color = ClearColors.muted, modifier = Modifier.padding(top = 2.dp))
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Smart mode coach", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
+                Text(text = smartModeSuggestion, fontSize = 11.sp, color = ClearColors.muted)
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "ShieldDNS Protection",
-                        fontSize = 15.sp,
-                        color = ClearColors.muted,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = if (isProtected) "Protected" else "Paused",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isProtected) Color(0xFF34D399) else ClearColors.muted // vibrant green like reference
-                    )
-                }
-
-                // Big "Get Started" / main action button — cyan pill exactly like the reference
-                LiquidGlassButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleProtection(!isProtected)
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 8.dp)
-                        .height(46.dp),
-                    accent = ClearColors.blue,
-                    contentColor = Color.White
-                ) {
-                    Text(
-                        text = if (isProtected) "Pause Protection" else "Get Started",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                // "Create Profile" link (subtle, reference style)
-                Text(
-                    text = "Create Profile",
-                    fontSize = 13.sp,
-                    color = ClearColors.muted,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = 14.dp)
-                        .clickable {
-                            // TODO: navigate to profile creation or show bottom sheet
+                    LiquidGlassButton(
+                        onClick = {
+                            currentMode = recommendedMode
+                            prefs.edit().putString(PreferenceKeys.KEY_PROTECTION_MODE, recommendedMode).apply()
+                            com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(context)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        },
+                        accent = ClearColors.green,
+                        contentColor = Color.White,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Use ${PreferenceKeys.modeDisplayName(recommendedMode)}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    LiquidGlassButton(
+                        onClick = {
+                            currentMode = if (recommendedMode == "elder") "shopping" else "elder"
+                            prefs.edit().putString(PreferenceKeys.KEY_PROTECTION_MODE, currentMode).apply()
+                            com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(context)
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        }
-                )
+                        },
+                        accent = ClearColors.blue,
+                        contentColor = Color.White,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (recommendedMode == "elder") "Try Shopping" else "Boost Elder", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
 
@@ -225,7 +283,12 @@ fun DashboardScreen(
 
         // Live states read from real PreferenceKeys
         var adsEnabled by remember {
-            mutableStateOf(prfs.getBoolean(PreferenceKeys.KEY_INDIAN_SCAM_SHIELD_ENABLED, PreferenceKeys.DEFAULT_INDIAN_SCAM_SHIELD_ENABLED))
+            mutableStateOf(
+                prfs.getBoolean(
+                    PreferenceKeys.KEY_AI_AD_PATTERN_DETECTOR_ENABLED,
+                    PreferenceKeys.DEFAULT_AI_AD_PATTERN_DETECTOR_ENABLED
+                )
+            )
         }
         var familyEnabled by remember {
             mutableStateOf(PreferenceKeys.getCurrentMode(ctx) == "kids")
@@ -248,9 +311,6 @@ fun DashboardScreen(
         var cryptoEnabled by remember {
             mutableStateOf(prfs.getBoolean(PreferenceKeys.KEY_RASP_ENABLED, PreferenceKeys.DEFAULT_RASP_ENABLED))
         }
-
-        // Data class for the cards
-        data class ShieldProfile(val label: String, val icon: ImageVector, val enabled: Boolean, val accent: Color)
 
         val profiles = listOf(
             ShieldProfile("Ads", Icons.Default.AdUnits, adsEnabled, ClearColors.green),
@@ -328,10 +388,10 @@ fun DashboardScreen(
                         },
                         onToggle = { enabled ->
                             when (index) {
-                                0 -> { // Ads → real Indian Scam Shield
+                                0 -> { // Ads -> AI Ad Pattern Detector
                                     adsEnabled = enabled
                                     prfs.edit()
-                                        .putBoolean(PreferenceKeys.KEY_INDIAN_SCAM_SHIELD_ENABLED, enabled)
+                                        .putBoolean(PreferenceKeys.KEY_AI_AD_PATTERN_DETECTOR_ENABLED, enabled)
                                         .apply()
                                     com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(ctx)
                                 }
@@ -453,12 +513,6 @@ fun DashboardScreen(
         // ===== Intent-Based Blocking: Full Protection Modes (user vision) =====
         Text("Protection Mode", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
         
-        val context = LocalContext.current
-        val prefs = remember { PreferenceKeys.prefs(context) }
-        var currentMode by remember {
-            mutableStateOf(PreferenceKeys.getCurrentMode(context))
-        }
-        
         // Exact modes from the product vision (Study / Work / Kids / Elder / Shopping / Spiritual / Battery Saver)
         val visionModes = listOf(
             "default" to Icons.Default.Shield,
@@ -569,7 +623,7 @@ fun DashboardScreen(
                 StatusRow("DNS Filtering", if (isProtected) "Active" else "Paused")
                 StatusRow("Threat Shield", threatShieldStatus)
                 if (PreferenceKeys.isIndianScamShieldEnabled(context)) {
-                    StatusRow("Indian Scam Shield", "Active — 9 India-specific scam types protected")
+                    StatusRow("Indian Scam Shield", "Active — 11 India-specific scam types protected")
                 }
                 StatusRow("Secure DNS", secureDnsStatus)
                 StatusRow("Local Cache", cacheTtlText)
@@ -655,6 +709,24 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FeatureChip(label: String, accent: Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(accent.copy(alpha = 0.12f))
+            .border(1.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            color = accent,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
@@ -761,6 +833,138 @@ private fun StatGlassCard(
                             listOf(accent, accent.copy(alpha = 0.15f))
                         )
                     )
+            )
+        }
+    }
+}
+
+/**
+ * Hero surface: a central "protection ring" framing the ShieldDNS logo, with the live
+ * status, feature chips, and the primary toggle below. Inspired by the Vanda VPN
+ * glassmorphism reference; built entirely from existing design tokens/components.
+ *
+ * The ring animates its sweep on/off with protection state. Height is content-driven so
+ * it adapts to font scaling (the old hero was a cramped fixed 260dp with three overlapping
+ * alignments).
+ */
+@Composable
+private fun ProtectionRingHero(
+    isProtected: Boolean,
+    blockedToday: Int,
+    onToggle: () -> Unit,
+    onCreateProfile: () -> Unit,
+) {
+    val haptic = LocalHapticFeedback.current
+    val sweep by animateFloatAsState(
+        targetValue = if (isProtected) 1f else 0.12f,
+        animationSpec = tween(900, easing = FastOutSlowInEasing),
+        label = "ringSweep"
+    )
+    val ringStart = if (isProtected) ClearColors.green else ClearColors.muted
+    val ringEnd = if (isProtected) ClearColors.blue else ClearColors.muted
+
+    GlassCardHero(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(modifier = Modifier.size(168.dp), contentAlignment = Alignment.Center) {
+                val track = ClearColors.glassBorder.copy(alpha = 0.25f)
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val stroke = 12.dp.toPx()
+                    val arc = Size(size.width - stroke, size.height - stroke)
+                    val tl = Offset(stroke / 2f, stroke / 2f)
+                    drawArc(
+                        color = track,
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = tl,
+                        size = arc,
+                        style = Stroke(width = stroke, cap = StrokeCap.Round)
+                    )
+                    drawArc(
+                        brush = Brush.sweepGradient(listOf(ringStart, ringEnd, ringStart)),
+                        startAngle = -90f,
+                        sweepAngle = 360f * sweep,
+                        useCenter = false,
+                        topLeft = tl,
+                        size = arc,
+                        style = Stroke(width = stroke, cap = StrokeCap.Round)
+                    )
+                }
+                if (isProtected) {
+                    Box(
+                        modifier = Modifier
+                            .size(128.dp)
+                            .clip(CircleShape)
+                            .background(
+                                brush = Brush.radialGradient(
+                                    listOf(ClearColors.blue.copy(alpha = 0.22f), Color.Transparent)
+                                )
+                            )
+                    )
+                }
+                FloatingParticles(
+                    isProtected = isProtected,
+                    modifier = Modifier.matchParentSize()
+                )
+                Image(
+                    painter = painterResource(id = R.drawable.shield_dns_logo),
+                    contentDescription = "ShieldDNS",
+                    modifier = Modifier.size(84.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = if (isProtected) "Protected" else "Paused",
+                fontSize = 30.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (isProtected) ClearColors.green else ClearColors.muted
+            )
+            Text(
+                text = if (isProtected) "$blockedToday threats & ads blocked today"
+                    else "Tap below to resume protection",
+                fontSize = 13.sp,
+                color = ClearColors.muted
+            )
+
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FeatureChip("Zero cloud", ClearColors.blue)
+                FeatureChip("Local AI", ClearColors.green)
+                FeatureChip("Fast DNS", ClearColors.warning)
+            }
+
+            Spacer(Modifier.height(20.dp))
+            LiquidGlassButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggle()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                accent = if (isProtected) ClearColors.green else ClearColors.blue,
+                contentColor = Color.White
+            ) {
+                Text(
+                    text = if (isProtected) "Pause Protection" else "Get Started",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Create Profile",
+                fontSize = 13.sp,
+                color = ClearColors.muted,
+                modifier = Modifier.clickable { onCreateProfile() }
             )
         }
     }

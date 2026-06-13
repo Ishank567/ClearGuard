@@ -10,7 +10,7 @@ ShieldDNS is built around **Intent-Based Protection Modes** and powerful on-devi
 
 ### Core + Vision Features Implemented
 - **Intent-Based Protection Modes** (Study / Work / Kids / Elder Safe Search / Shopping / Spiritual (Satvik/Dharma Clean) / Battery Saver + Default). Each mode changes DNS rules, scam thresholds, distraction blocking, and DoH/cache behavior.
-- **Indian Scam Shield (Dedicated)** — first-class on-device protection specifically against the 9 most common India-specific scams:
+- **Indian Scam Shield (Dedicated)** — first-class on-device protection specifically against the 11 most common India-specific scams:
   - UPI KYC scam
   - Fake electricity bill payment
   - Fake courier delivery fee
@@ -20,8 +20,14 @@ ShieldDNS is built around **Intent-Based Protection Modes** and powerful on-devi
   - Fake investment group
   - Fake APK download
   - Fake customer care number
+  - **Digital arrest / fake authority** — impersonation of CBI, police, customs, TRAI, or the Enforcement Directorate that threatens "arrest" over a fake parcel, money-laundering case, or SIM misuse and keeps the victim on a video call until they pay. Detected across the SMS/text scanner, screenshot scanner, in-app browser, and DNS layer; ordinary mentions of "police"/"court" are intentionally excluded so the alarm only fires on the real authority-plus-coercion pattern.
+  - **Festival / seasonal offer scam** — fake Diwali/Holi/Rakhi "bonus", lucky draws, scratch cards, free-gift and free-recharge lures and sale-event ("Big Billion", "Great Indian Sale") impersonations that spike around Indian festivals. Covered in the scanner and DNS layer.
   Toggleable independently in Settings. When active, blocks are labeled "Indian Scam Shield: ..." in Activity and recent threats.
+- **Official cyber-fraud helpline action** — whenever a message or screenshot scores as a real scam (and always for the digital-arrest pattern), the scanner surfaces India's genuine reporting channels: one-tap **dial 1930** (National Cyber Crime Helpline) and **open cybercrime.gov.in**, with plain advice ("no agency arrests you over a call; never pay to release a parcel or unblock a SIM; report fast to freeze the money"). This gives a worried user the real government next step instead of a scammer's fake "helpline".
+- **Foreign-number call screening (anti digital-arrest)** — optional toggle under Spam Call Filter (Settings). Because fake CBI/police/customs calls almost always originate from international numbers, this silences incoming calls bearing a non-Indian (non-+91) country code, fully on-device. Off by default and clearly labelled, since it also silences genuine overseas callers (e.g. NRIs); foreign-flagged calls are only ever silenced, never hard-rejected.
   - **Scam Screenshot Scanner** (Privacy tab → Scanner): Upload any screenshot of a suspicious ad, SMS, WhatsApp forward, or website. On-device ML Kit OCR + the same Indian Scam Shield keyword heuristics instantly detect Fake reward, Fake KYC, Fake payment, Fake investment, Fake job, Fake customer support, and Fake APK link. Shows matched snippets, confidence, and lets you one-tap block any domains found in the image. Completely private (no cloud, no upload).
+  - **SMS / Text Scam Check** (Privacy tab → Scanner, or the share sheet): Paste a suspicious SMS/WhatsApp message — or share it to ShieldDNS from any app ("Scan for scams" also appears in the text-selection toolbar). Runs the same Indian Scam Shield patterns plus the multi-modal phishing engine: scam UPI link parsing (`upi://pay` payee + amount risk), high-risk phone number scoring (FRI heuristic), and optional TFLite classification. One-tap block any domains found in the message. No SMS permissions needed — nothing is read automatically, nothing leaves the device.
+- **Spam Call Filter** (Settings → Spam Call Filter): On-device call screening via Android's Call Screening role (Android 10+). Incoming numbers are scored against the bundled FRI risk database + scam heuristics; high-risk callers are silenced (default) or rejected outright. Numbers are never sent anywhere.
 - **Fake Customer Care Number Blocker**: In the built-in Browser, "Phone Shield" automatically scans pages for phone numbers shown next to bank/UPI/airline/courier/electricity "support" language and shows prominent warnings ("This number may not be official. Verify before calling.").
 - **Dark Pattern Blocker**: Toggle + automatic + "Clean this page" button hides forced popups, confirm-shaming buttons, auto-checked subscriptions, tricky cookie "accept all", and subscription cancellation dark patterns.
 - **"Clean My Website" Button**: Prominent button in the browser toolbar instantly strips ads, floating videos, sticky headers, sidebars, newsletter popups, cookie banners, recommended articles, and empty ad spaces. Combines with the existing per-site memory cleaner.
@@ -54,7 +60,7 @@ ShieldDNS is built around **Intent-Based Protection Modes** and powerful on-devi
 - Stunning **3D splash screen** on launch featuring the official ShieldDNS logo with real perspective transforms (rotationX/Y + cameraDistance), breathing animation, orbiting particles, and the animated cyber mesh background.
 - **Dashboard hero** with the large glowing logo shield, clear "Protected" status, prominent cyan "Get Started/Pause" action, and "Create Profile" link.
 - **Active Shields** — beautiful floating 3D-tilted dark glass cards with glowing network connection lines (exactly like the reference design). These cards now control **real, live features**:
-  - **Ads** — toggles the full Indian Scam Shield (9 scam categories).
+  - **Ads** — toggles the full Indian Scam Shield (11 scam categories).
   - **Family** — switches to Kids protection mode.
   - **Trackers** — enables real browser anti-fingerprint + cookie removal.
   - **Gaming** — switches to Battery Saver mode.

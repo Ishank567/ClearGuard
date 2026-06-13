@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
@@ -58,6 +59,7 @@ fun StatisticsScreen(
     dohEnabled: Boolean,
     dohQueries: Long
 ) {
+    val context = LocalContext.current
     val cacheEfficiency = cacheEfficiencyRatio(cacheHits, upstreamQueries)
     val avoidedDnsTrips = blockedTotal + cacheHits
     val securityScore = securityScore(
@@ -68,6 +70,9 @@ fun StatisticsScreen(
         latencyMs = upstreamAverageLatencyMs,
         dohEnabled = dohEnabled
     )
+    val aiAdPatternBlocks = remember(blockedTotal) {
+        PreferenceKeys.prefs(context).getLong(PreferenceKeys.KEY_AI_AD_PATTERN_BLOCKED_COUNT, 0L)
+    }
 
     Column(
         modifier = Modifier
@@ -92,6 +97,10 @@ fun StatisticsScreen(
                 accent = false
             )
         }
+
+        Spacer(Modifier.height(12.dp))
+
+        TrafficSplitCard(blockedTotal = blockedTotal, allowedTotal = allowedTotal)
 
         Spacer(Modifier.height(12.dp))
 
@@ -171,11 +180,20 @@ fun StatisticsScreen(
             )
             StatCard(
                 modifier = Modifier.weight(1f),
-                label = "Security Score",
-                value = "$securityScore",
-                accent = scamShieldEnabled
+                label = "AI Ad Patterns",
+                value = formatNumber(aiAdPatternBlocks),
+                accent = aiAdPatternBlocks > 0L
             )
         }
+
+        Spacer(Modifier.height(12.dp))
+
+        StatCard(
+            modifier = Modifier.fillMaxWidth(),
+            label = "Security Score",
+            value = "$securityScore",
+            accent = scamShieldEnabled
+        )
 
         Spacer(Modifier.height(16.dp))
 
@@ -203,7 +221,6 @@ fun StatisticsScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        val context = LocalContext.current
         val topBlocked = remember(blockedTotal, blockedToday) { loadTopBlocked(context) }
         if (topBlocked.isNotEmpty()) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -435,6 +452,94 @@ private fun MeterBar(progress: Float, color: Color) {
     }
 }
 
+/**
+ * Canonical "blocked vs allowed" donut driven by the real on-device aggregate counters.
+ * Center shows the block rate; the ring is the blocked share (green) over the allowed base
+ * (blue). Matches the fintech-donut reference and shares the ring language of the Dashboard
+ * hero, so the two surfaces read as one system.
+ */
+@Composable
+private fun TrafficSplitCard(blockedTotal: Long, allowedTotal: Long) {
+    val total = blockedTotal + allowedTotal
+    val blockedRatio = if (total > 0) blockedTotal.toFloat() / total else 0f
+    val animatedRatio by animateFloatAsState(
+        targetValue = blockedRatio,
+        animationSpec = tween(900, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "trafficSplit"
+    )
+    val rateLabel = if (total > 0) String.format(Locale.US, "%.0f%%", blockedRatio * 100f) else "—"
+
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .padding(18.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(modifier = Modifier.size(110.dp), contentAlignment = Alignment.Center) {
+                val track = ClearColors.border.copy(alpha = 0.45f)
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val stroke = 14.dp.toPx()
+                    val arc = Size(size.width - stroke, size.height - stroke)
+                    val tl = Offset(stroke / 2f, stroke / 2f)
+                    if (total > 0) {
+                        drawArc(
+                            color = ClearColors.blue.copy(alpha = 0.85f),
+                            startAngle = -90f, sweepAngle = 360f, useCenter = false,
+                            topLeft = tl, size = arc, style = Stroke(width = stroke)
+                        )
+                        drawArc(
+                            color = ClearColors.green,
+                            startAngle = -90f, sweepAngle = 360f * animatedRatio, useCenter = false,
+                            topLeft = tl, size = arc, style = Stroke(width = stroke)
+                        )
+                    } else {
+                        drawArc(
+                            color = track,
+                            startAngle = -90f, sweepAngle = 360f, useCenter = false,
+                            topLeft = tl, size = arc, style = Stroke(width = stroke)
+                        )
+                    }
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(rateLabel, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
+                    Text("blocked", fontSize = 10.sp, color = ClearColors.muted)
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Traffic Split", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Spacer(Modifier.height(10.dp))
+                TrafficLegendRow(ClearColors.green, "Blocked", formatNumber(blockedTotal))
+                Spacer(Modifier.height(6.dp))
+                TrafficLegendRow(ClearColors.blue, "Allowed", formatNumber(allowedTotal))
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (total > 0) "Across ${formatNumber(total)} DNS queries"
+                    else "No DNS queries recorded yet",
+                    fontSize = 11.sp,
+                    color = ClearColors.muted
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrafficLegendRow(color: Color, label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(label, fontSize = 13.sp, color = ClearColors.muted, modifier = Modifier.weight(1f))
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
+    }
+}
+
 @Composable
 private fun StatCard(
     modifier: Modifier = Modifier,
@@ -647,7 +752,7 @@ private fun QueryHistoryChart(modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Query Volume (7 Days)", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("Query Volume — sample trend", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     LegendItem("Allowed", ClearColors.blue)
                     LegendItem("Blocked", ClearColors.green)
@@ -802,6 +907,13 @@ private fun QueryHistoryChart(modifier: Modifier = Modifier) {
                     Text(text = label, fontSize = 11.sp, color = ClearColors.muted)
                 }
             }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Illustrative 7-day shape. ShieldDNS keeps only aggregate on-device counts, not daily history.",
+                fontSize = 10.sp,
+                color = ClearColors.muted
+            )
         }
     }
 }

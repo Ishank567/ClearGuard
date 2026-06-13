@@ -326,24 +326,31 @@ fun BrowserScreen() {
             }
         }
 
-        // UPI Payee Verification & Delay hint (from current URL or page)
+        // Safe Payment Checks: risky UPI transaction alert (from current URL or page)
         currentUrl?.let { url ->
-            if (url.startsWith("upi://", ignoreCase = true)) {
-                val upi = com.clearguard.app.security.OnDeviceRuleEngine.parseUpiLink(url)
-                if (upi != null) {
-                    val verification = com.clearguard.app.security.OnDeviceRuleEngine.BankingGateway.verifyPayee(
-                        upi.vpa, upi.amount, "in-app browser transaction"
-                    )
+            if (prefs.getBoolean(
+                    PreferenceKeys.KEY_SAFE_PAYMENT_CHECKS_ENABLED,
+                    PreferenceKeys.DEFAULT_SAFE_PAYMENT_CHECKS_ENABLED
+                ) && url.startsWith("upi://", ignoreCase = true)
+            ) {
+                val paymentCheck = com.clearguard.app.security.OnDeviceRuleEngine.safePaymentCheck("$url in-app browser transaction")
+                if (paymentCheck != null) {
+                    val accent = when (paymentCheck.riskLevel) {
+                        "High" -> ClearColors.danger
+                        "Medium" -> ClearColors.warning
+                        else -> ClearColors.green
+                    }
                     GlassCard(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
                         cornerRadius = 10.dp
                     ) {
                         Column(Modifier.padding(10.dp)) {
-                            Text("UPI Payee Verification (Banking Gateway)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (verification.riskScore > 50) ClearColors.danger else ClearColors.green)
-                            Text("VPA: ${verification.vpa} | Verified Name: ${verification.verifiedName ?: "Unknown"}", fontSize = 11.sp)
-                            if (upi.amount != null) Text("Amount: ₹${upi.amount}", fontSize = 11.sp)
-                            Text("Risk: ${verification.riskScore}/100 | Action: ${verification.recommendedAction}", fontSize = 10.sp, color = ClearColors.muted)
-                            Text(verification.explanation, fontSize = 10.sp, color = ClearColors.muted)
+                            Text("Safe Payment Check", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = accent)
+                            Text(paymentCheck.alertMessage, fontSize = 11.sp, color = ClearColors.text)
+                            Text("Risk: ${paymentCheck.riskScore}/100 | ${paymentCheck.recommendation}", fontSize = 10.sp, color = ClearColors.muted)
+                            paymentCheck.reasons.take(2).forEach { reason ->
+                                Text("• $reason", fontSize = 10.sp, color = ClearColors.muted)
+                            }
                         }
                     }
                 }

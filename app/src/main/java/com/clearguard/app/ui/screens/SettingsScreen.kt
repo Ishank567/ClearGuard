@@ -1,9 +1,12 @@
 package com.clearguard.app.ui.screens
 
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -223,6 +226,8 @@ fun SettingsScreen(
                 }
             }
         }
+
+        FeatureTransparencyPanel(context = context)
 
         // --- SECTION 1: AI Firewall Features ---
         var firewallExpanded by remember { mutableStateOf(true) }
@@ -500,6 +505,44 @@ fun SettingsScreen(
             }
         }
 
+        // AI ad-pattern detector for evasive hosts that are not yet in blocklists.
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("AI Ad Pattern Detector", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(
+                        "Scores ad-tech, bidding, pixel, telemetry, and tracker-like DNS names before they resolve.",
+                        fontSize = 12.sp,
+                        color = ClearColors.muted
+                    )
+                }
+                var adPatternDetector by remember {
+                    mutableStateOf(
+                        prefs.getBoolean(
+                            PreferenceKeys.KEY_AI_AD_PATTERN_DETECTOR_ENABLED,
+                            PreferenceKeys.DEFAULT_AI_AD_PATTERN_DETECTOR_ENABLED
+                        )
+                    )
+                }
+                ClearSwitch(
+                    checked = adPatternDetector,
+                    onCheckedChange = { enabled ->
+                        adPatternDetector = enabled
+                        prefs.edit()
+                            .putBoolean(PreferenceKeys.KEY_AI_AD_PATTERN_DETECTOR_ENABLED, enabled)
+                            .apply()
+                        ClearGuardVpnService.reloadIfRunning(context)
+                    }
+                )
+            }
+        }
+
         // Mobile Risk Scoring (FRI-like), UPI Payee Verification, RASP (roadmap features)
         GlassCard {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -522,12 +565,29 @@ fun SettingsScreen(
                     ClearSwitch(checked = remoteSignals, onCheckedChange = { remoteSignals = it; prefs.edit().putBoolean(PreferenceKeys.KEY_MOBILE_RISK_REMOTE_SIGNALS, it).apply() })
                 }
 
-                var upiVerify by remember {
-                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_UPI_PAYEE_VERIFICATION_ENABLED, PreferenceKeys.DEFAULT_UPI_PAYEE_VERIFICATION_ENABLED))
+                var safePaymentChecks by remember {
+                    mutableStateOf(
+                        prefs.getBoolean(
+                            PreferenceKeys.KEY_SAFE_PAYMENT_CHECKS_ENABLED,
+                            PreferenceKeys.DEFAULT_SAFE_PAYMENT_CHECKS_ENABLED
+                        )
+                    )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("UPI Payee Verification & Delay Risk", modifier = Modifier.weight(1f), fontSize = 12.sp)
-                    ClearSwitch(checked = upiVerify, onCheckedChange = { upiVerify = it; prefs.edit().putBoolean(PreferenceKeys.KEY_UPI_PAYEE_VERIFICATION_ENABLED, it).apply() })
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Safe Payment Checks", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Alerts for risky UPI payment links before you pay.", fontSize = 11.sp, color = ClearColors.muted)
+                    }
+                    ClearSwitch(
+                        checked = safePaymentChecks,
+                        onCheckedChange = {
+                            safePaymentChecks = it
+                            prefs.edit()
+                                .putBoolean(PreferenceKeys.KEY_SAFE_PAYMENT_CHECKS_ENABLED, it)
+                                .putBoolean(PreferenceKeys.KEY_UPI_PAYEE_VERIFICATION_ENABLED, it)
+                                .apply()
+                        }
+                    )
                 }
 
                 var rasp by remember {
@@ -540,7 +600,94 @@ fun SettingsScreen(
             }
         }
 
-        // === Dedicated Indian Scam Shield (user-requested 9 categories) ===
+        // Spam Call Filter — on-device call screening via the system Call Screening role
+        GlassCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Spam Call Filter", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ClearColors.green)
+                Text(
+                    "Screens incoming calls against the on-device FRI risk database and scam heuristics. High-risk callers are silenced (or rejected). Numbers never leave your phone. Requires the Call Screening role on Android 10+.",
+                    fontSize = 11.sp,
+                    color = ClearColors.muted
+                )
+                Spacer(Modifier.height(10.dp))
+
+                var callScreening by remember {
+                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_CALL_SCREENING_ENABLED, PreferenceKeys.DEFAULT_CALL_SCREENING_ENABLED))
+                }
+                val roleLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    if (result.resultCode != android.app.Activity.RESULT_OK) {
+                        // User declined the role — the service will never be bound, so reflect that
+                        callScreening = false
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_CALL_SCREENING_ENABLED, false).apply()
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Block spam calls (on-device FRI)", modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    ClearSwitch(
+                        checked = callScreening,
+                        onCheckedChange = { enabled ->
+                            callScreening = enabled
+                            prefs.edit().putBoolean(PreferenceKeys.KEY_CALL_SCREENING_ENABLED, enabled).apply()
+                            if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                val roleManager = context.getSystemService(RoleManager::class.java)
+                                if (roleManager != null &&
+                                    roleManager.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING) &&
+                                    !roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)
+                                ) {
+                                    roleLauncher.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING))
+                                }
+                            }
+                        }
+                    )
+                }
+
+                var rejectCalls by remember {
+                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_CALL_SCREENING_REJECT, PreferenceKeys.DEFAULT_CALL_SCREENING_REJECT))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Reject instead of silence", modifier = Modifier.weight(1f), fontSize = 12.sp, color = ClearColors.muted)
+                    ClearSwitch(
+                        checked = rejectCalls,
+                        onCheckedChange = { rejectCalls = it; prefs.edit().putBoolean(PreferenceKeys.KEY_CALL_SCREENING_REJECT, it).apply() }
+                    )
+                }
+
+                var warnIntlCalls by remember {
+                    mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_WARN_INTERNATIONAL_CALLS, PreferenceKeys.DEFAULT_WARN_INTERNATIONAL_CALLS))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Silence foreign-number calls (anti digital-arrest)", fontSize = 12.sp, color = ClearColors.muted)
+                        Text("Fake CBI/police/customs calls almost always use international numbers. Also silences genuine overseas callers — leave off if you receive NRI/foreign calls.", fontSize = 10.sp, color = ClearColors.muted)
+                    }
+                    ClearSwitch(
+                        checked = warnIntlCalls,
+                        onCheckedChange = { warnIntlCalls = it; prefs.edit().putBoolean(PreferenceKeys.KEY_WARN_INTERNATIONAL_CALLS, it).apply() }
+                    )
+                }
+
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("Your Android version does not support the Call Screening role (needs Android 10+).", fontSize = 11.sp, color = ClearColors.danger)
+                } else {
+                    val spamCallsBlocked = prefs.getLong(PreferenceKeys.KEY_SPAM_CALLS_BLOCKED, 0L)
+                    if (spamCallsBlocked > 0) {
+                        Spacer(Modifier.height(4.dp))
+                        Text("$spamCallsBlocked spam call(s) screened so far", fontSize = 11.sp, color = ClearColors.green)
+                    }
+                    val intlScreened = prefs.getLong(PreferenceKeys.KEY_INTL_CALLS_SCREENED, 0L)
+                    if (intlScreened > 0) {
+                        Spacer(Modifier.height(2.dp))
+                        Text("$intlScreened foreign-number call(s) silenced", fontSize = 11.sp, color = ClearColors.green)
+                    }
+                }
+            }
+        }
+
+        // === Dedicated Indian Scam Shield (user-requested 11 categories) ===
         GlassCard {
             Row(
                 modifier = Modifier
@@ -551,7 +698,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Indian Scam Shield", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = ClearColors.green)
-                    Text("Dedicated protection: UPI KYC • Fake electricity bill • Courier delivery fee • Loan approval • Job registration fee • Government scheme • Investment group • Fake APK • Customer care number", fontSize = 11.sp, color = ClearColors.muted)
+                    Text("Dedicated protection: UPI KYC • Fake electricity bill • Courier delivery fee • Loan approval • Job registration fee • Government scheme • Investment group • Fake APK • Customer care number • Digital arrest / fake authority • Festival / seasonal offer", fontSize = 11.sp, color = ClearColors.muted)
                 }
                 ClearSwitch(
                     checked = indianScamShieldEnabled,

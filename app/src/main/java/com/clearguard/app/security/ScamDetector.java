@@ -73,7 +73,7 @@ public final class ScamDetector {
             "mygov.in", "india.gov.in", "aadhaar.gov.in"
     ));
 
-    // === Indian Scam Shield - dedicated patterns for the 9 common India-specific scams ===
+    // === Indian Scam Shield - dedicated patterns for the 11 common India-specific scams ===
     private static final Set<String> ELECTRICITY_BILL_SCAM = new HashSet<>(Arrays.asList(
             "electricity", "ebill", "billpay", "currentbill", "powerbill", "mseb", "bescom",
             "tneb", "electricityboard", "paymybill", "ebillpay", "electricitypayment", "billpayment"
@@ -87,6 +87,16 @@ public final class ScamDetector {
     ));
     private static final Set<String> GOV_SCHEME_FAKE = new HashSet<>(Arrays.asList(
             "pmkisan", "pmjay", "aayushman", "sarkariyojana", "govtscheme", "freelaptop", "freescheme"
+    ));
+    // "Digital arrest" / fake-authority lure domains (CBI/police/customs/TRAI/ED impersonation).
+    private static final Set<String> DIGITAL_ARREST_FAKE = new HashSet<>(Arrays.asList(
+            "digitalarrest", "cbiverify", "cybercrimeverify", "customsclearance", "parcelhold",
+            "trai", "simblock", "narcotics", "policeverify", "courtsummon", "edcase"
+    ));
+    // Festival / seasonal offer lure domains (spike around Diwali, Holi, sale events).
+    private static final Set<String> FESTIVAL_FAKE = new HashSet<>(Arrays.asList(
+            "diwalioffer", "diwalidhamaka", "festivaloffer", "festiveoffer", "luckydraw",
+            "scratchcard", "spinwin", "freegift", "freerecharge", "giftcard", "bumperoffer"
     ));
 
     private ScamDetector() {
@@ -356,6 +366,22 @@ public final class ScamDetector {
             if (hasCare && (nearBankOrPayment || compact.contains("1800") || compact.contains("toll") || compact.contains("helpline"))) {
                 score += 73;
                 reason = "Fake customer care number";
+            }
+
+            // 10. Digital arrest / fake authority (CBI/police/customs/TRAI/ED impersonation)
+            if (containsAny(compactNoSep, DIGITAL_ARREST_FAKE)
+                    || (compactNoSep.contains("customs") && (compact.contains("clear") || compact.contains("pay") || compact.contains("parcel")))
+                    || (compactNoSep.contains("police") && (compact.contains("verify") || compact.contains("fine") || compact.contains("case")))) {
+                score += 84;
+                reason = "Digital arrest / fake authority scam";
+            }
+
+            // 11. Festival / seasonal offer scam (Diwali, Holi, sale-event lures)
+            if (containsAny(compactNoSep, FESTIVAL_FAKE)
+                    || ((compactNoSep.contains("diwali") || compactNoSep.contains("holi") || compactNoSep.contains("festival") || compactNoSep.contains("festive"))
+                        && (compact.contains("offer") || compact.contains("gift") || compact.contains("win") || compact.contains("claim") || compact.contains("reward")))) {
+                score += 72;
+                reason = "Festival / seasonal offer scam";
             }
         }
 

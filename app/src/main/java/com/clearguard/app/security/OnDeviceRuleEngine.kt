@@ -14,6 +14,7 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+import java.net.URLDecoder
 import java.security.MessageDigest
 import java.security.SecureRandom
 
@@ -272,6 +273,13 @@ object OnDeviceRuleEngine {
         return phoneRiskScore(phone, contextText) >= threshold
     }
 
+    /** True when the number matches an entry in the local FRI DB or edge threat signals (decisive for call screening). */
+    fun isInLocalRiskDB(phone: String): Boolean {
+        val clean = normalizePhone(phone)
+        if (clean.isEmpty()) return false
+        return (LOCAL_FRI_BAD_PATTERNS + EDGE_THREAT_SIGNALS).any { it.isNotEmpty() && clean.contains(it.takeLast(10)) }
+    }
+
     private fun String.containsAny(list: List<String>) = list.any { this.contains(it) }
 
     /** Centralized normalizer for phone numbers: strips non-digits, normalizes +91/0 prefixes, keeps last 10 digits. Used everywhere for consistency. */
@@ -333,7 +341,7 @@ object OnDeviceRuleEngine {
                 if (configuredEndpoint != null) setRemoteEndpoint(configuredEndpoint)
                 try {
                     val remote = withContext(Dispatchers.IO) {
-                        queryRemoteFRI(phone)
+                        queryRemoteFRI(context, phone)
                     }
                     if (remote != null) {
                         finalScore = maxOf(localScore, remote)
@@ -368,7 +376,7 @@ object OnDeviceRuleEngine {
             return phones.map { queryRisk(context, it) }
         }
 
-        private fun queryRemoteFRI(phone: String): Int? {
+        private fun queryRemoteFRI(context: Context, phone: String): Int? {
             // Enhanced stub for "FRI + operator signals" - realtime capable.
             // In production: Use authenticated POST to real DoT FRI or telco partner API (e.g., with mTLS/OAuth).
             // Privacy: use HMAC-SHA256 with secret from secure storage (see Hardware Key Mgmt).
@@ -388,8 +396,8 @@ object OnDeviceRuleEngine {
                 com.clearguard.app.PreferenceKeys.DEFAULT_FRI_REMOTE_ENDPOINT
             }
 
-            // Real HMAC for privacy (use a secret; in prod from KeyStore/encrypted prefs)
-            val secret = "super_secret_fri_key_change_in_prod" // TODO: load from secure storage
+            // Derive a per-app HMAC seed at runtime so the stub never uses a global hard-coded secret.
+            val secret = getOrCreateHmacSecret(context)
             val hmac = try {
                 val mac = Mac.getInstance("HmacSHA256")
                 mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
@@ -413,7 +421,7 @@ object OnDeviceRuleEngine {
                 val request = Request.Builder()
                     .url(url)
                     .post(jsonBody.toRequestBody("application/json".toMediaType()))
-                    .header("Authorization", "Bearer ${getApiKeyOrStub()}")
+                    .header("Authorization", "Bearer ${getApiKeyOrStub(context)}")
                     .header("X-Client", "ShieldDNS")
                     .header("X-Request-ID", java.util.UUID.randomUUID().toString()) // for tracing
                     .build()
@@ -450,10 +458,28 @@ object OnDeviceRuleEngine {
             return queryBatchRisk(context, phones).filter { it.isHighRisk }
         }
 
-        private fun getApiKeyOrStub(): String {
-            // In real: from secure storage (see Hardware-backed Key Management).
-            // For demo: return a placeholder. Production must use encrypted prefs or KeyStore.
-            return "demo_fri_key_replace_in_prod"
+        private fun getApiKeyOrStub(context: Context): String {
+            val prefs = PreferenceKeys.prefs(context)
+            return prefs.getString(PreferenceKeys.KEY_REMOTE_API_KEY, null)
+                ?: run {
+                    val derived = MessageDigest.getInstance("SHA-256")
+                        .digest((context.packageName + ":fri-stub-v1").toByteArray(Charsets.UTF_8))
+                        .fold("") { acc, byte -> acc + "%02x".format(byte) }
+                        .take(64)
+                    prefs.edit().putString(PreferenceKeys.KEY_REMOTE_API_KEY, derived).apply()
+                    derived
+                }
+        }
+
+        fun getOrCreateHmacSecret(context: Context): String {
+            val prefs = PreferenceKeys.prefs(context)
+            return prefs.getString(PreferenceKeys.KEY_HMAC_SEED, null)
+                ?: run {
+                    val seed = ByteArray(32).also { SecureRandom().nextBytes(it) }
+                    val hex = seed.joinToString("") { "%02x".format(it) }
+                    prefs.edit().putString(PreferenceKeys.KEY_HMAC_SEED, hex).apply()
+                    hex
+                }
         }
     }
 
@@ -471,13 +497,27 @@ object OnDeviceRuleEngine {
     data class UpiLink(val vpa: String, val payeeName: String?, val amount: String?, val raw: String)
 
     fun parseUpiLink(text: String): UpiLink? {
-        val match = Regex("upi://pay\\?([^\\s]+)").find(text) ?: return null
-        val params = match.groupValues[1].split("&").associate {
-            val (k, v) = it.split("=", limit = 2)
-            k.lowercase() to v
+        val match = Regex("upi://pay\\?([^\\s]+)", RegexOption.IGNORE_CASE).find(text) ?: return null
+        val params = match.groupValues[1].split("&").mapNotNull { pair ->
+            val parts = pair.split("=", limit = 2)
+            if (parts.size != 2) {
+                null
+            } else {
+                val key = parts[0].lowercase()
+                val value = try {
+                    URLDecoder.decode(parts[1], "UTF-8")
+                } catch (_: Exception) {
+                    parts[1]
+                }
+                key to value
+            }
+        }.toMap()
+        val vpa = params["pa"]?.trim()?.lowercase().orEmpty()
+        if (vpa.isBlank()) {
+            return null
         }
         return UpiLink(
-            vpa = params["pa"] ?: "",
+            vpa = vpa,
             payeeName = params["pn"],
             amount = params["am"],
             raw = match.value
@@ -488,10 +528,88 @@ object OnDeviceRuleEngine {
         var risk = 0
         if (upi.vpa.contains(Regex("[^a-z0-9@\\.]"))) risk += 20 // suspicious chars
         if (upi.payeeName.isNullOrBlank() || upi.payeeName.length < 3) risk += 25
-        if (upi.amount != null && upi.amount.toDoubleOrNull() ?: 0.0 > 10000) risk += 15
+        val amount = upi.amount?.toDoubleOrNull() ?: 0.0
+        if (amount > 10000) risk += 15
         val combined = (upi.vpa + " " + (upi.payeeName ?: "") + " " + context).lowercase()
         if (BRAND_IMPERSONATION.any { combined.contains(it) && !upi.vpa.endsWith("@okaxis") && !upi.vpa.endsWith("@oksbi") }) risk += 30
         return risk.coerceIn(0, 100)
+    }
+
+    data class SafePaymentCheck(
+        val upi: UpiLink,
+        val riskScore: Int,
+        val riskLevel: String,
+        val recommendation: String,
+        val alertMessage: String,
+        val reasons: List<String>,
+        val delayRecommendation: String
+    )
+
+    fun safePaymentCheck(text: String): SafePaymentCheck? {
+        val upi = parseUpiLink(text) ?: return null
+        val amount = upi.amount?.toDoubleOrNull()
+        val reasons = mutableListOf<String>()
+        var risk = upiRiskScore(upi, text)
+
+        if (upi.payeeName.isNullOrBlank()) {
+            reasons += "Payee name is missing from the UPI link."
+        }
+        if (amount != null && amount >= 10_000.0) {
+            reasons += "High-value payment amount detected."
+        }
+        val lower = (text + " " + upi.vpa + " " + (upi.payeeName ?: "")).lowercase()
+        if (lower.containsAny(listOf("kyc", "refund", "reward", "cashback", "urgent", "verify", "electricity", "courier", "loan", "job fee", "registration fee"))) {
+            risk += 25
+            reasons += "Payment appears near common scam wording."
+        }
+        if (lower.containsAny(listOf("otp", "pin", "password"))) {
+            risk += 20
+            reasons += "Message asks for sensitive banking or authentication details."
+        }
+        if (!upi.vpa.contains("@")) {
+            risk += 30
+            reasons += "VPA format is incomplete."
+        }
+        if (upi.vpa.contains(Regex("[^a-z0-9@\\.]"))) {
+            reasons += "VPA contains unusual characters."
+        }
+        if (BRAND_IMPERSONATION.any { lower.contains(it) } &&
+            !upi.vpa.endsWith("@okaxis") &&
+            !upi.vpa.endsWith("@oksbi") &&
+            !upi.vpa.endsWith("@paytm")) {
+            reasons += "Brand or bank wording does not match a common verified UPI handle."
+        }
+
+        val verification = BankingGateway.verifyPayee(upi.vpa, upi.amount, text)
+        if (!verification.isVerified) {
+            risk += 15
+            reasons += "Payee is not in the local verified-payee cache."
+        }
+
+        val boundedRisk = risk.coerceIn(0, 100)
+        val riskLevel = when {
+            boundedRisk >= 70 -> "High"
+            boundedRisk >= 40 -> "Medium"
+            else -> "Low"
+        }
+        val recommendation = when (riskLevel) {
+            "High" -> "Do not pay until verified through the official app or known contact."
+            "Medium" -> "Pause and verify payee name, amount, and purpose before paying."
+            else -> "Looks lower risk, but confirm the payee before completing payment."
+        }
+        val delayRecommendation = if (boundedRisk >= 40) "DELAY_TRANSACTION_30S" else "NO_DELAY"
+        val amountText = amount?.let { " for ₹${upi.amount}" } ?: ""
+        val alertMessage = "UPI payment$amountText to ${upi.vpa} is $riskLevel risk."
+
+        return SafePaymentCheck(
+            upi = upi,
+            riskScore = boundedRisk,
+            riskLevel = riskLevel,
+            recommendation = recommendation,
+            alertMessage = alertMessage,
+            reasons = reasons.distinct().ifEmpty { listOf("No strong scam payment indicators found.") },
+            delayRecommendation = delayRecommendation
+        )
     }
 
     // === Banking Gateway Integration (NPCI/Bank APIs) stub ===
@@ -546,12 +664,13 @@ object OnDeviceRuleEngine {
 
         // Stub for "remote" bank/NPCI call (similar to FRI remote, with HMAC for privacy).
         // In prod: call real API, cache result in VERIFIED_PAYEES or secure store.
-        fun simulateRemoteVerify(vpa: String): String? {
+        fun simulateRemoteVerify(vpa: String, context: Context? = null): String? {
             // Placeholder logic, enhanced with hash like FRI.
             val hash = try {
+                val secret = context?.let { MobileRiskScoringApi.getOrCreateHmacSecret(it) } ?: "bank_secret"
                 val mac = Mac.getInstance("HmacSHA256")
-                mac.init(SecretKeySpec("bank_secret".toByteArray(), "HmacSHA256"))
-                mac.doFinal(vpa.toByteArray()).fold("") { str, it -> str + "%02x".format(it) }.take(16)
+                mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+                mac.doFinal(vpa.toByteArray(Charsets.UTF_8)).fold("") { str, it -> str + "%02x".format(it) }.take(16)
             } catch (e: Exception) { vpa.hashCode().toString() }
             return if (vpa.endsWith("@oksbi") || vpa.endsWith("@paytm") || hash.contains("a")) "Verified Merchant/User via NPCI" else null
         }
@@ -593,6 +712,13 @@ object OnDeviceRuleEngine {
             extraScore += 20
             extraReasons += "Possible vishing script language"
         }
+        // "Digital arrest" / fake-authority fraud (India's highest-loss scam). Impersonates
+        // police/CBI/customs/TRAI/ED, threatens arrest over a fake parcel or SIM, and keeps the
+        // victim on a video call until they pay. Treat strongly when an authority+threat pair appears.
+        if (isDigitalArrest(text)) {
+            extraScore = maxOf(extraScore, 90)
+            extraReasons += "Possible 'digital arrest' / fake authority scam — report on 1930"
+        }
 
         return ClassificationResult(
             score = extraScore.coerceIn(0, 100),
@@ -607,6 +733,71 @@ object OnDeviceRuleEngine {
         val label: String,
         val reasons: List<String>,
         val isPhishing: Boolean
+    )
+
+    // === "Digital arrest" / fake-authority scam detection ===
+    // Two signal groups: an authority/agency claim and a coercion/threat or money demand.
+    // A match requires BOTH groups (or an unambiguous phrase like "digital arrest"), keeping
+    // precision high so ordinary mentions of "police" or "court" don't trip the alarm.
+    private val AUTHORITY_TERMS = listOf(
+        "digital arrest", "cbi", "ncb", "enforcement directorate", "cyber cell", "cyber crime branch",
+        "customs", "trai", "telecom department", "narcotics", "income tax department", "police officer"
+    )
+    private val COERCION_TERMS = listOf(
+        "arrest warrant", "non-bailable", "court summon", "money laundering", "illegal parcel",
+        "parcel seized", "sim will be blocked", "your number will be blocked", "do not disconnect",
+        "stay on the call", "video call", "skype", "refundable security", "verification charge",
+        "fine of", "under investigation"
+    )
+
+    /**
+     * True when the raw caller ID carries an explicit non-Indian (foreign) country code.
+     * Fake CBI/police/customs "digital arrest" calls almost always come from international numbers.
+     * A bare domestic 10-digit number (no country code) returns false — only an unambiguous
+     * +<code> / 00<code> that is not India's +91 is treated as foreign.
+     */
+    fun isForeignNumber(rawNumber: String?): Boolean {
+        if (rawNumber.isNullOrBlank()) return false
+        val trimmed = rawNumber.trim().replace(" ", "").replace("-", "")
+        val e164 = when {
+            trimmed.startsWith("+") -> trimmed
+            trimmed.startsWith("00") -> "+" + trimmed.substring(2)
+            else -> return false // no country code present → treat as domestic
+        }
+        val digits = e164.removePrefix("+").replace(Regex("[^0-9]"), "")
+        if (digits.length < 4) return false
+        // India is country code 91; anything else with an explicit code is foreign.
+        return !digits.startsWith("91")
+    }
+
+    /** True when text matches the fake-authority "digital arrest" coercion pattern. */
+    fun isDigitalArrest(text: String): Boolean {
+        val t = text.lowercase()
+        if (t.contains("digital arrest")) return true
+        val hasAuthority = AUTHORITY_TERMS.any { t.contains(it) }
+        val hasCoercion = COERCION_TERMS.any { t.contains(it) }
+        return hasAuthority && hasCoercion
+    }
+
+    data class CyberHelpline(
+        val number: String,
+        val portal: String,
+        val advice: List<String>
+    )
+
+    /**
+     * India's official cyber-fraud reporting channels (National Cyber Crime Reporting Portal / I4C).
+     * Shown alongside high-risk scam verdicts so a worried user has the real, government-published
+     * next step instead of a scammer's "helpline". These are public facts, not stored secrets.
+     */
+    fun cyberHelplineInfo(): CyberHelpline = CyberHelpline(
+        number = "1930",
+        portal = "https://cybercrime.gov.in",
+        advice = listOf(
+            "No government agency (police, CBI, customs, TRAI) ever arrests you over a call or video call.",
+            "Never pay a 'verification', 'security deposit' or 'fine' to release a parcel or unblock a SIM.",
+            "Disconnect, then call 1930 or report at cybercrime.gov.in within the first hours to freeze the money."
+        )
     )
 
     // === Explainable regional alerts (Hindi/Bundeli microcopy for trust) ===

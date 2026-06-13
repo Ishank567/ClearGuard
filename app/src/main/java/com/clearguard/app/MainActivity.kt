@@ -2,6 +2,7 @@ package com.clearguard.app
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.VpnService
@@ -50,11 +51,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,8 +61,6 @@ import kotlin.math.sin
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -88,7 +83,6 @@ import com.clearguard.app.ui.theme.ClearGuardTheme
 import com.clearguard.app.ui.theme.ThemeMode
 import com.clearguard.app.ui.theme.ClearMeshBackground
 import com.clearguard.app.vpn.ClearGuardVpnService
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 enum class AppScreen(val title: String, val icon: ImageVector) {
@@ -128,6 +122,16 @@ class MainActivity : ComponentActivity() {
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 11)
         }
+        // Text shared from another app (SMS, WhatsApp) or the text-selection toolbar →
+        // open the on-device SMS/Text Scam Check with it.
+        val sharedScamText = when (intent?.action) {
+            Intent.ACTION_SEND ->
+                if (intent.type == "text/plain") intent.getStringExtra(Intent.EXTRA_TEXT) else null
+            Intent.ACTION_PROCESS_TEXT ->
+                intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
+            else -> null
+        }?.takeIf { it.isNotBlank() }
+
         setContent {
             var themeMode by remember {
                 mutableStateOf(
@@ -142,6 +146,7 @@ class MainActivity : ComponentActivity() {
             ClearGuardTheme(themeMode = themeMode) {
                 ClearGuardApp(
                     themeMode = themeMode,
+                    sharedScamText = sharedScamText,
                     onThemeModeChange = { mode ->
                         PreferenceKeys.prefs(this).edit()
                             .putString(PreferenceKeys.KEY_THEME_MODE, mode.prefValue)
@@ -157,7 +162,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ClearGuardApp(
     themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit
+    onThemeModeChange: (ThemeMode) -> Unit,
+    sharedScamText: String? = null
 ) {
     val context = LocalContext.current
 
@@ -167,6 +173,8 @@ fun ClearGuardApp(
                 .getBoolean(PreferenceKeys.KEY_ONBOARDING_SEEN, false)
         )
     }
+    // Skip the splash when the user shared text to scan — get them to the verdict fast
+    var show3DSplash by remember { mutableStateOf(sharedScamText == null) }
 
     if (showOnboarding) {
         OnboardingScreen(onComplete = {
@@ -184,10 +192,9 @@ fun ClearGuardApp(
         return
     }
 
-    var currentScreen by remember { mutableStateOf(AppScreen.Dashboard) }
-
-    // Modern 3D splash for premium launch experience
-    var show3DSplash by remember { mutableStateOf(true) }
+    var currentScreen by remember {
+        mutableStateOf(if (sharedScamText != null) AppScreen.Privacy else AppScreen.Dashboard)
+    }
 
     // Real state synced with the VPN service + live updates via broadcast
     var isProtected by remember { mutableStateOf(ClearGuardVpnService.isRunning()) }
@@ -347,7 +354,8 @@ fun ClearGuardApp(
                         scamBlocked = scamBlockedState.value,
                         scamShieldEnabled = scamShieldEnabledState.value,
                         dohEnabled = dohEnabledState.value,
-                        dohQueries = dohQueryState.value
+                        dohQueries = dohQueryState.value,
+                        initialScanText = sharedScamText
                     )
                     AppScreen.Browser -> BrowserScreen()
                     AppScreen.Blocklists -> BlocklistsScreen()
@@ -869,7 +877,7 @@ fun ThreeDSplash(onFinished: () -> Unit) {
                 val angle = orbit + (i * 72f)
                 val rad = Math.toRadians(angle.toDouble())
                 val px = cx + (r * cos(rad)).toFloat()
-                val py = cy + (r * sin(rad) * 0.45f)   // squash for 3D ellipse orbit
+                val py = cy + (r * sin(rad).toFloat() * 0.45f)   // squash for 3D ellipse orbit
 
                 drawCircle(
                     color = if (i % 2 == 0) ClearColors.green.copy(alpha = 0.55f) else ClearColors.blue.copy(alpha = 0.4f),

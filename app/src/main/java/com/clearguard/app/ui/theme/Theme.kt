@@ -24,6 +24,8 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** User-selectable appearance, persisted under PreferenceKeys.KEY_THEME_MODE. */
 enum class ThemeMode(val prefValue: String) {

@@ -45,22 +45,23 @@ data class ClearPalette(
 )
 
 object ClearPalettes {
-    /** The original light "liquid glass" look. */
+    /** The light "liquid glass" look. Background sits a touch deeper than the white
+     *  cards so frosted surfaces read with real separation and float. */
     val light = ClearPalette(
-        bg = Color(0xFFF0F3F6),
+        bg = Color(0xFFE9EEF6),
         panel = Color(0xFFFFFFFF),
-        text = Color(0xFF0F172A),
-        muted = Color(0xFF64748B),
-        green = Color(0xFF0D9488),
-        blue = Color(0xFF0EA5E9),
-        border = Color(0xFFE2E8F0),
-        glass = Color(0xFFFFFFFF).copy(alpha = 0.85f),
-        glassBorder = Color.White.copy(alpha = 0.60f),
-        glassHighlight = Color.White.copy(alpha = 0.40f),
-        glassShadow = Color(0xFF0F172A).copy(alpha = 0.05f),
+        text = Color(0xFF0E1626),
+        muted = Color(0xFF566379),
+        green = Color(0xFF0EA88F),
+        blue = Color(0xFF2BA9E0),
+        border = Color(0xFFDCE3EE),
+        glass = Color(0xFFFFFFFF).copy(alpha = 0.86f),
+        glassBorder = Color.White.copy(alpha = 0.70f),
+        glassHighlight = Color.White.copy(alpha = 0.50f),
+        glassShadow = Color(0xFF1E293B).copy(alpha = 0.10f),
         success = Color(0xFF0D9488),
-        danger = Color(0xFFF43F5E),
-        warning = Color(0xFFF59E0B),
+        danger = Color(0xFFE11D48),
+        warning = Color(0xFFE08A0B),
         glassDark = Color(0xFF0F172A).copy(alpha = 0.70f),
         useGlass = true
     )
@@ -71,19 +72,19 @@ object ClearPalettes {
      * Uses teal/cyan accents unified with the light theme for brand consistency.
      */
     val dark = ClearPalette(
-        bg = Color(0xFF0C0F14),
-        panel = Color(0xFF141820),
-        text = Color(0xFFE8ECF4),
-        muted = Color(0xFF6B7A8D),
+        bg = Color(0xFF0A0E1A),
+        panel = Color(0xFF141B2E),
+        text = Color(0xFFF2F6FF),
+        muted = Color(0xFF9AA9C6),
         green = Color(0xFF2DD4BF),
-        blue = Color(0xFF38BDF8),
-        border = Color(0xFF1E2736),
-        glass = Color(0xFFFFFFFF).copy(alpha = 0.08f),
-        glassBorder = Color.White.copy(alpha = 0.12f),
-        glassHighlight = Color.White.copy(alpha = 0.06f),
-        glassShadow = Color(0xFF000000).copy(alpha = 0.40f),
+        blue = Color(0xFF67E8F9),
+        border = Color(0xFF243049),
+        glass = Color(0xFFFFFFFF).copy(alpha = 0.09f),
+        glassBorder = Color.White.copy(alpha = 0.15f),
+        glassHighlight = Color.White.copy(alpha = 0.09f),
+        glassShadow = Color(0xFF000000).copy(alpha = 0.45f),
         success = Color(0xFF34D399),
-        danger = Color(0xFFF43F5E),
+        danger = Color(0xFFFB5071),
         warning = Color(0xFFFBBF24),
         glassDark = Color(0xFF0A0D12).copy(alpha = 0.85f),
         useGlass = true

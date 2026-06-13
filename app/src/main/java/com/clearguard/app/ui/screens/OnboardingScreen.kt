@@ -67,14 +67,14 @@ import kotlin.math.absoluteValue
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.graphicsLayer
+import com.clearguard.app.R
 
 // ────────────────────────────────────────────────────────────────────────────
 // Data
 // ────────────────────────────────────────────────────────────────────────────
 
 private data class OnboardingPage(
-    val icon: ImageVector,
+    val icon: ImageVector?,
     val title: String,
     val subtitle: String,
     val description: String,

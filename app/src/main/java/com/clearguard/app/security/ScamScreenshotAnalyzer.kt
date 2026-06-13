@@ -3,7 +3,6 @@ package com.clearguard.app.security
 import android.content.Context
 import android.graphics.Bitmap
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -41,6 +40,30 @@ object ScamScreenshotAnalyzer {
     private val FAKE_CUSTOMER_SUPPORT = listOf("customer care", "helpline", "toll free", "1800", "call now", "customer support", "support number", "whatsapp support", "refund helpline", "official support")
     private val FAKE_APK = listOf("install apk", "download apk", "claim reward apk", "get apk", "fake app", "install app", "apk link", "direct apk")
 
+    // "Digital arrest" / fake-authority scam — currently India's highest-loss fraud (I4C/RBI warnings).
+    // Scammers impersonate CBI / police / customs / TRAI / Enforcement Directorate, claim an illegal
+    // parcel, money-laundering case or SIM misuse, and keep the victim on a video call under "digital
+    // arrest" until they pay a "verification" / "refundable security" amount. Uses specific multi-word
+    // phrases to stay precise (bare "police"/"court" are intentionally excluded to avoid false positives).
+    private val DIGITAL_ARREST = listOf(
+        "digital arrest", "arrest warrant", "non-bailable", "bailable warrant", "court summon",
+        "money laundering", "illegal parcel", "your parcel contains", "parcel seized", "customs seized",
+        "narcotics", "drugs were found", "mdma", "cyber cell", "cyber crime branch",
+        "enforcement directorate", "cbi officer", "ncb officer", "police verification",
+        "sim will be blocked", "sim card will be blocked", "your number will be blocked",
+        "do not disconnect", "stay on the call", "join the video call", "skype verification",
+        "under investigation", "refundable security deposit", "verification charges to clear"
+    )
+
+    // Festival / seasonal scams spike around Indian festivals & sale events — fake "bonus", lucky
+    // draws, free gifts and recharge offers piggy-backing on Diwali, Holi, Rakhi, sales, etc.
+    private val FESTIVAL_SCAM = listOf(
+        "diwali offer", "diwali bonus", "diwali dhamaka", "holi offer", "rakhi offer", "new year offer",
+        "republic day offer", "independence day offer", "big billion", "great indian sale", "festival offer",
+        "festive offer", "lucky draw", "scratch card", "spin and win", "spin to win", "free gift",
+        "gift card", "free recharge", "congratulations you have been selected", "claim your gift"
+    )
+
     private val PHONE_REGEX = Regex("\\b(?:\\+?91|0)?[6-9]\\d{9}\\b")
 
     /**
@@ -52,56 +75,64 @@ object ScamScreenshotAnalyzer {
 
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
-                val fullText = visionText.text.lowercase()
-                val detections = scanText(context, fullText, visionText).toMutableList()
-
-                // === Multi-modal Phishing Engine (regex + TFLite + UPI/QR/Phone risk) ===
-                try {
-                    val upi = com.clearguard.app.security.OnDeviceRuleEngine.parseUpiLink(fullText)
-                    val phone = PHONE_REGEX.find(fullText)?.value
-                    val multiRes = com.clearguard.app.security.OnDeviceRuleEngine.multiModalClassify(fullText, null, phone, upi)
-                    if (multiRes.isPhishing || multiRes.score >= 60) {
-                        detections.add(
-                            Detection(
-                                "Multi-modal Phishing",
-                                multiRes.label + " | " + com.clearguard.app.security.OnDeviceRuleEngine.getRegionalExplanation(multiRes),
-                                fullText.take(100),
-                                multiRes.score.coerceAtMost(95)
-                            )
-                        )
-                    }
-
-                    // TFLite (if enabled)
-                    val prefs = com.clearguard.app.PreferenceKeys.prefs(context)
-                    val tfliteOn = prefs.getBoolean(
-                        com.clearguard.app.PreferenceKeys.KEY_PHISHING_TFLITE_ENABLED,
-                        com.clearguard.app.PreferenceKeys.DEFAULT_PHISHING_TFLITE_ENABLED
-                    )
-                    if (tfliteOn) {
-                        val mlRes = com.clearguard.app.security.PhishingClassifier.classify(context, fullText, null, true, phone, upi)
-                        if (mlRes.phishingProbability > 0.58f) {
-                            detections.add(
-                                Detection(
-                                    "Phishing (TFLite multi-modal)",
-                                    mlRes.label,
-                                    fullText.take(80),
-                                    (mlRes.phishingProbability * 100).toInt().coerceAtMost(97)
-                                )
-                            )
-                        }
-                    }
-                } catch (_: Exception) {
-                    // Never break scanner
-                }
-
-                continuation.resume(detections)
+                continuation.resume(analyzeText(context, visionText.text))
             }
             .addOnFailureListener { e ->
                 continuation.resumeWithException(e)
             }
     }
 
-    private fun scanText(context: Context, fullText: String, visionText: Text): List<Detection> {
+    /**
+     * Text-only entry: analyze any raw text (shared SMS, WhatsApp forward, pasted message)
+     * with the same Indian Scam Shield patterns + multi-modal phishing engine. No OCR needed.
+     */
+    fun analyzeText(context: Context, rawText: String): List<Detection> {
+        val fullText = rawText.lowercase()
+        val detections = scanText(context, fullText).toMutableList()
+
+        // === Multi-modal Phishing Engine (regex + TFLite + UPI/QR/Phone risk) ===
+        try {
+            val upi = OnDeviceRuleEngine.parseUpiLink(fullText)
+            val phone = PHONE_REGEX.find(fullText)?.value
+            val multiRes = OnDeviceRuleEngine.multiModalClassify(fullText, null, phone, upi)
+            if (multiRes.isPhishing || multiRes.score >= 60) {
+                detections.add(
+                    Detection(
+                        "Multi-modal Phishing",
+                        multiRes.label + " | " + OnDeviceRuleEngine.getRegionalExplanation(multiRes),
+                        fullText.take(100),
+                        multiRes.score.coerceAtMost(95)
+                    )
+                )
+            }
+
+            // TFLite (if enabled)
+            val prefs = com.clearguard.app.PreferenceKeys.prefs(context)
+            val tfliteOn = prefs.getBoolean(
+                com.clearguard.app.PreferenceKeys.KEY_PHISHING_TFLITE_ENABLED,
+                com.clearguard.app.PreferenceKeys.DEFAULT_PHISHING_TFLITE_ENABLED
+            )
+            if (tfliteOn) {
+                val mlRes = PhishingClassifier.classify(context, fullText, null, true, phone, upi)
+                if (mlRes.phishingProbability > 0.58f) {
+                    detections.add(
+                        Detection(
+                            "Phishing (TFLite multi-modal)",
+                            mlRes.label,
+                            fullText.take(80),
+                            (mlRes.phishingProbability * 100).toInt().coerceAtMost(97)
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            // Never break scanner
+        }
+
+        return detections
+    }
+
+    private fun scanText(context: Context, fullText: String): List<Detection> {
         val results = mutableListOf<Detection>()
 
         // Helper to find best snippet
@@ -137,6 +168,25 @@ object ScamScreenshotAnalyzer {
         addIfMatch("Fake job", FAKE_JOB, 76)
         addIfMatch("Fake customer support", FAKE_CUSTOMER_SUPPORT, 73)
         addIfMatch("Fake APK link", FAKE_APK, 85)
+        addIfMatch("Digital arrest / fake authority", DIGITAL_ARREST, 90)
+        addIfMatch("Festival / seasonal offer scam", FESTIVAL_SCAM, 74)
+
+        // Strong combo: an "authority/threat" phrase together with a money demand is the classic
+        // digital-arrest pattern — escalate confidence and make the warning explicit.
+        val authorityHit = fullText.containsAny(DIGITAL_ARREST)
+        val moneyDemand = fullText.containsAny(
+            listOf("transfer", "pay ₹", "deposit", "rtgs", "neft", "upi", "security amount", "fine of")
+        )
+        if (authorityHit && moneyDemand && results.none { it.category == "Digital arrest / fake authority" && it.confidence >= 92 }) {
+            results.add(
+                Detection(
+                    "Digital arrest / fake authority",
+                    "Someone posing as police/CBI/customs is demanding money. Real agencies never arrest you over a call or ask for transfers. Do not pay — disconnect and report on 1930.",
+                    findSnippet(DIGITAL_ARREST) ?: fullText.take(90),
+                    95
+                )
+            )
+        }
 
         // Bonus: detect phone numbers + customer support language (very common in these scams)
         if (PHONE_REGEX.containsMatchIn(fullText) && fullText.containsAny(FAKE_CUSTOMER_SUPPORT)) {
@@ -144,22 +194,23 @@ object ScamScreenshotAnalyzer {
             results.add(Detection("Fake customer support", "Phone number + support language detected", "Phone: $match", 88))
         }
 
-        // Multi-modal: UPI/QR detection + Banking Gateway verification (NPCI stub)
-        val upiLink = com.clearguard.app.security.OnDeviceRuleEngine.parseUpiLink(fullText)
-        if (upiLink != null) {
-            val verification = com.clearguard.app.security.OnDeviceRuleEngine.BankingGateway.verifyPayee(
-                upiLink.vpa, upiLink.amount, fullText
-            )
-            results.add(Detection(
-                "UPI Payee Verification (Banking Gateway)",
-                verification.recommendedAction,
-                "VPA: ${verification.vpa} | ${verification.explanation}",
-                verification.riskScore
-            ))
+        val prefs = com.clearguard.app.PreferenceKeys.prefs(context)
+        // Safe Payment Checks - gated by setting
+        if (prefs.getBoolean(com.clearguard.app.PreferenceKeys.KEY_SAFE_PAYMENT_CHECKS_ENABLED, com.clearguard.app.PreferenceKeys.DEFAULT_SAFE_PAYMENT_CHECKS_ENABLED)) {
+            val paymentCheck = com.clearguard.app.security.OnDeviceRuleEngine.safePaymentCheck(fullText)
+            if (paymentCheck != null) {
+                results.add(
+                    Detection(
+                        "Safe Payment Check",
+                        paymentCheck.recommendation,
+                        paymentCheck.alertMessage + " " + paymentCheck.reasons.joinToString(" "),
+                        paymentCheck.riskScore.coerceAtLeast(35)
+                    )
+                )
+            }
         }
 
         // Phone risk scoring (FRI-like) - gated by setting
-        val prefs = com.clearguard.app.PreferenceKeys.prefs(context)
         if (prefs.getBoolean(com.clearguard.app.PreferenceKeys.KEY_MOBILE_RISK_SCORING_ENABLED, com.clearguard.app.PreferenceKeys.DEFAULT_MOBILE_RISK_SCORING_ENABLED)) {
             val phones = PHONE_REGEX.findAll(fullText).map { it.value }.toList()
             phones.forEach { ph ->

@@ -6,4 +6,5 @@
     <string name="total_blocked">Total Blocked</string>
     <string name="unsafe_wifi_title">Unsafe Wi-Fi Detected</string>
     <string name="unsafe_wifi_text">Joined unsafe public Wi-Fi. ShieldDNS is active to secure your traffic.</string>
+    <string name="scan_text_for_scams">Scan for scams (ShieldDNS)</string>
 </resources>
