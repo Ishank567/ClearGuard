@@ -1,4 +1,6 @@
 package com.clearguard.app.ui.screens
+import com.clearguard.app.ui.components.*
+import com.clearguard.app.ui.theme.*
 
 import android.app.role.RoleManager
 import android.content.Context
@@ -383,11 +385,6 @@ fun SettingsScreen(
 
                 Spacer(Modifier.height(8.dp))
                 Text("Time-based rules, religious clean mode, and regional packs can be toggled in advanced builds.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-
-
             }
         }
 
@@ -987,8 +984,6 @@ fun SettingsScreen(
                 }
             }
         }
-
-        }} // close Column + AnimatedVisibility for DNS section
 
         // App Split Tunnel exclusions
         GlassCard {

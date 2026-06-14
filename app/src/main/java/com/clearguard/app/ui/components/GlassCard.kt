@@ -2,18 +2,23 @@ package com.clearguard.app.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -36,9 +41,10 @@ fun GlassCard(
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
-        content = content
-    )
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation)
+    ) {
+        Box(content = content)
+    }
 }
 
 /** Compatibility shims — delegate to the clean GlassCard */
@@ -78,9 +84,10 @@ fun GlassCardInteractive(
             contentColor = MaterialTheme.colorScheme.onSurface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        interactionSource = interactionSource,
-        content = content
-    )
+        interactionSource = interactionSource
+    ) {
+        Box(content = content)
+    }
 }
 
 /**

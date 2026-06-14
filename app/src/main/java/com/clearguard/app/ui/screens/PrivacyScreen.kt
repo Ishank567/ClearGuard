@@ -1,4 +1,7 @@
 package com.clearguard.app.ui.screens
+import com.clearguard.app.ui.components.*
+
+import com.clearguard.app.ui.theme.*
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing

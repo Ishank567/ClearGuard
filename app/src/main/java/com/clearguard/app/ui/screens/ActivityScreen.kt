@@ -1,4 +1,7 @@
 package com.clearguard.app.ui.screens
+import com.clearguard.app.ui.components.*
+import androidx.compose.material3.MaterialTheme
+import com.clearguard.app.ui.theme.*
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

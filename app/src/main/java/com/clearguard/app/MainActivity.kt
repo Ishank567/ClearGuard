@@ -82,9 +82,6 @@ import com.clearguard.app.ui.theme.ClearGuardTheme
 import com.clearguard.app.ui.theme.ThemeMode
 import com.clearguard.app.vpn.ClearGuardVpnService
 import androidx.compose.material3.*
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.isActive
 
 enum class AppScreen(val title: String, val icon: ImageVector) {
@@ -412,7 +409,6 @@ fun ClearGuardApp(
             }
         }
     }
-}
 }
 
 // === Real aggregate stats helpers ===

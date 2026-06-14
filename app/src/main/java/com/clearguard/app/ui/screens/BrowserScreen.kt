@@ -1,4 +1,6 @@
 package com.clearguard.app.ui.screens
+import com.clearguard.app.ui.components.*
+import com.clearguard.app.ui.theme.*
 
 import android.annotation.SuppressLint
 import android.content.Context
