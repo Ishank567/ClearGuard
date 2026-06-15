@@ -124,8 +124,9 @@ fun AnimatedShieldLogo(
             }
         }
 
+        // Vector launcher mark — scales cleanly and avoids large bitmap decode failures on low-RAM devices.
         Image(
-            painter = painterResource(id = R.drawable.shield_dns_logo),
+            painter = painterResource(id = R.drawable.ic_launcher_foreground),
             contentDescription = "ShieldDNS",
             contentScale = ContentScale.Fit,
             modifier = Modifier

@@ -2253,6 +2253,12 @@ fun SmsTextScamScanner(initialText: String? = null) {
                     suggestedDomains = domains
                     safePaymentCheck = paymentCheck
                     hasAnalyzed = true
+                } catch (e: Exception) {
+                    detections = emptyList()
+                    suggestedDomains = emptyList()
+                    safePaymentCheck = null
+                    hasAnalyzed = true
+                    android.util.Log.w("SmsTextScamScanner", "Scam text analysis failed: ${e.message}")
                 } finally {
                     isChecking = false
                 }

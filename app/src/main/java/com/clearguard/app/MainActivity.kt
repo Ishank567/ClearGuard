@@ -102,22 +102,26 @@ class MainActivity : ComponentActivity() {
         // the first frame blocks the UI thread and triggers a launch ANR. None of it is needed to
         // render the initial UI, so kick it off the main thread.
         lifecycleScope.launch(Dispatchers.IO) {
-            HostBlocker.get(this@MainActivity).reload()
-            BlocklistUpdateWorker.sync(this@MainActivity)
+            try {
+                HostBlocker.get(this@MainActivity).reload()
+                BlocklistUpdateWorker.sync(this@MainActivity)
 
-            // On-device rule engine + TFLite phishing classifier (no-ops gracefully if absent).
-            com.clearguard.app.security.PhishingClassifier.initialize(this@MainActivity)
+                // On-device rule engine + TFLite phishing classifier (no-ops gracefully if absent).
+                com.clearguard.app.security.PhishingClassifier.initialize(this@MainActivity)
 
-            // Small FRI risk DB from assets + auto-seed (Mobile Number Risk Scoring).
-            com.clearguard.app.security.OnDeviceRuleEngine.loadLocalFRIDB(this@MainActivity)
+                // Small FRI risk DB from assets + auto-seed (Mobile Number Risk Scoring).
+                com.clearguard.app.security.OnDeviceRuleEngine.loadLocalFRIDB(this@MainActivity)
 
-            // RASP + Anti-tamper check (opt-in). Reads /proc/self/maps, so keep it off the UI thread.
-            if (com.clearguard.app.PreferenceKeys.prefs(this@MainActivity).getBoolean(
-                    com.clearguard.app.PreferenceKeys.KEY_RASP_ENABLED,
-                    com.clearguard.app.PreferenceKeys.DEFAULT_RASP_ENABLED
-                )) {
-                val raspReport = com.clearguard.app.security.RaspGuard.checkIntegrity(this@MainActivity)
-                com.clearguard.app.security.RaspGuard.logReport(raspReport)
+                // RASP + Anti-tamper check (opt-in). Reads /proc/self/maps, so keep it off the UI thread.
+                if (com.clearguard.app.PreferenceKeys.prefs(this@MainActivity).getBoolean(
+                        com.clearguard.app.PreferenceKeys.KEY_RASP_ENABLED,
+                        com.clearguard.app.PreferenceKeys.DEFAULT_RASP_ENABLED
+                    )) {
+                    val raspReport = com.clearguard.app.security.RaspGuard.checkIntegrity(this@MainActivity)
+                    com.clearguard.app.security.RaspGuard.logReport(raspReport)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Background startup task failed (non-fatal): ${e.message}")
             }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&

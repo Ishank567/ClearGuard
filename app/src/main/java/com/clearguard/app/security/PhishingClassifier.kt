@@ -40,7 +40,8 @@ object PhishingClassifier {
             val model = loadMappedAsset(context, MODEL_FILE)
             val options = Interpreter.Options().apply {
                 setNumThreads(2)           // small model, 2 threads is plenty
-                setUseNNAPI(true)          // use NNAPI on supported devices (faster)
+                // NNAPI can hard-crash on some OEM drivers; stay on CPU for stability.
+                setUseNNAPI(false)
             }
             interpreter = Interpreter(model, options)
             modelAvailable.set(true)
