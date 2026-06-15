@@ -461,7 +461,9 @@ public final class ScamDetector {
 
         int boundedScore = Math.min(score, 100);
         int effectiveThreshold = BLOCK_THRESHOLD;
-        if ("elder".equals(protectionMode) || "kids".equals(protectionMode)) {
+        if ("elder".equals(protectionMode)) {
+            effectiveThreshold = 50; // elders are the prime fraud target; the block explainer + allow-once make this safe
+        } else if ("kids".equals(protectionMode)) {
             effectiveThreshold = 55; // stricter for vulnerable users
         }
         if (boundedScore >= effectiveThreshold) {

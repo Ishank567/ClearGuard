@@ -462,6 +462,18 @@ public final class ClearGuardVpnService extends VpnService {
             }
         }
 
+        // Meta / Instagram tracker & ad-telemetry pack. Blocks the Facebook Audience Network ad
+        // servers and Meta analytics/pixel hosts, which is safe at DNS level. NOTE: this cannot
+        // remove the in-feed / Reels video ads inside the Instagram app — those are served
+        // first-party from the same *.cdninstagram.com / *.fbcdn.net domains as real photos and
+        // videos, so sinkholing them would break the app. The optional native-app ad-skipper
+        // (InstagramAdSkipperService) covers that layer.
+        if (dnsResponse == null && prefs.getBoolean(PreferenceKeys.KEY_META_AD_PACK, PreferenceKeys.DEFAULT_META_AD_PACK)
+                && isMetaAdHost(question.name)) {
+            dnsResponse = DnsMessage.blockedResponse(request.dnsPayload, question);
+            recordFirewallBlocked(question.name, "Meta/Instagram tracker pack", appInfo.name, appInfo.packageName);
+        }
+
         // Data Saver: heavy ad/video-ad networks account for a large share of page
         // bytes on mobile. Blocking them at DNS level cuts data usage directly.
         if (dnsResponse == null && prefs.getBoolean(PreferenceKeys.KEY_DATA_SAVER_ENABLED, PreferenceKeys.DEFAULT_DATA_SAVER_ENABLED)
@@ -627,6 +639,35 @@ public final class ClearGuardVpnService extends VpnService {
         return false;
     }
 
+    // Meta/Instagram ad & tracking endpoints that are safe to sinkhole without breaking core
+    // Facebook/Instagram content. Deliberately excludes the content/API/CDN hosts the apps need
+    // (graph.facebook.com, i.instagram.com, graph.instagram.com, *.cdninstagram.com, *.fbcdn.net).
+    private static final String[] META_AD_HOSTS = {
+            "an.facebook.com",          // Facebook Audience Network — ads served into third-party apps
+            "an.instagram.com",
+            "ads.facebook.com",
+            "ads.instagram.com",
+            "analytics.facebook.com",
+            "pixel.facebook.com",
+            "connect.facebook.net"      // FB pixel / tracking SDK (may also disable "Login with Facebook" widgets)
+    };
+
+    private static boolean isMetaAdHost(String name) {
+        if (name == null) {
+            return false;
+        }
+        String host = name.toLowerCase(java.util.Locale.US);
+        if (host.endsWith(".")) {
+            host = host.substring(0, host.length() - 1);
+        }
+        for (String adHost : META_AD_HOSTS) {
+            if (host.equals(adHost) || host.endsWith("." + adHost)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private byte[] forwardToUpstream(byte[] dnsPayload) throws IOException {
         String upstream = prefs.getString(
                 PreferenceKeys.KEY_UPSTREAM_DNS,
@@ -731,19 +772,25 @@ public final class ClearGuardVpnService extends VpnService {
     }
 
     private ScamDetector.Result scamThreat(String domain, String protectionMode) {
-        if (!prefs.getBoolean(
+        String mode = (protectionMode != null && !protectionMode.isEmpty())
+                ? protectionMode
+                : prefs.getString(PreferenceKeys.KEY_PROTECTION_MODE, PreferenceKeys.DEFAULT_PROTECTION_MODE);
+        // Elder Mode is an explicit opt-in to anti-fraud protection: it forces both the base scam
+        // shield and the dedicated Indian Scam Shield on regardless of their individual toggles, so
+        // the digital-arrest / KYC / loan / customer-care protection the mode advertises is actually
+        // delivered. ScamDetector additionally applies a stricter block threshold for "elder".
+        boolean elder = "elder".equalsIgnoreCase(mode);
+        boolean scamShieldOn = elder || prefs.getBoolean(
                 PreferenceKeys.KEY_SCAM_SHIELD_ENABLED,
-                PreferenceKeys.DEFAULT_SCAM_SHIELD_ENABLED)) {
+                PreferenceKeys.DEFAULT_SCAM_SHIELD_ENABLED);
+        if (!scamShieldOn) {
             return null;
         }
         if (blocker.isAllowed(domain)) {
             return null;
         }
-        String mode = (protectionMode != null && !protectionMode.isEmpty())
-                ? protectionMode
-                : prefs.getString(PreferenceKeys.KEY_PROTECTION_MODE, PreferenceKeys.DEFAULT_PROTECTION_MODE);
         boolean religiousClean = "spiritual".equalsIgnoreCase(mode) || prefs.getBoolean("religious_clean_enabled", false);
-        boolean indianScam = prefs.getBoolean(
+        boolean indianScam = elder || prefs.getBoolean(
                 PreferenceKeys.KEY_INDIAN_SCAM_SHIELD_ENABLED,
                 PreferenceKeys.DEFAULT_INDIAN_SCAM_SHIELD_ENABLED
         );

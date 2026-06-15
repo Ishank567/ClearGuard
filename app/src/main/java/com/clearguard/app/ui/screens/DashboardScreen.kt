@@ -132,26 +132,21 @@ fun DashboardScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Premium branded logo treatment - using high-quality modern logo asset + wordmark
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
+            // Premium branded logo treatment — animated shield (breathes + radar-sweeps while
+            // protected, calm when paused) above the wordmark.
+            AnimatedShieldLogo(
+                diameter = 108.dp,
+                accent = MaterialTheme.colorScheme.primary,
+                active = isProtected,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            Text(
+                text = "ShieldDNS",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 16.dp)
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.shield_dns_logo),
-                    contentDescription = "ShieldDNS",
-                    modifier = Modifier.height(48.dp),
-                    contentScale = ContentScale.Fit
-                )
-                Spacer(Modifier.width(14.dp))
-                Text(
-                    text = "ShieldDNS",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
+            )
 
             // Big, calm status
             Text(

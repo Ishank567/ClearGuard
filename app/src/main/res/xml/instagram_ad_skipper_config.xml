@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuration for InstagramAdSkipperService. Scoped to Instagram only (android:packageNames) so
+  ShieldDNS never observes any other app. canRetrieveWindowContent is required to find the
+  "Sponsored" label; the service only reads that label and scrolls, never stores or sends content.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/ig_ad_skipper_description"
+    android:notificationTimeout="100"
+    android:packageNames="com.instagram.android" />

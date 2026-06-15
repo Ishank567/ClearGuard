@@ -221,6 +221,10 @@ fun LiveMonitorScreen(
     var isProtected by remember { mutableStateOf(ClearGuardVpnService.isRunning()) }
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     var selectedQuery by remember { mutableStateOf<ClearGuardVpnService.BlockedQuery?>(null) }
+    // Currently-active "Allow once" reprieves (domain -> remaining millis), so they're visible and revocable.
+    var tempAllows by remember { mutableStateOf<List<Pair<String, Long>>>(emptyList()) }
+    // Locally-stored false-block reports the user filed (never uploaded); shown for review/resolution.
+    var reportedFPs by remember { mutableStateOf(fetchReportedFalsePositives(context)) }
     var upstreamDns by remember {
         mutableStateOf(
             prefs.getString(PreferenceKeys.KEY_UPSTREAM_DNS, PreferenceKeys.DEFAULT_UPSTREAM_DNS)
@@ -233,6 +237,7 @@ fun LiveMonitorScreen(
             queries = ClearGuardVpnService.recentBlocked()
             isProtected = ClearGuardVpnService.isRunning()
             nowMillis = System.currentTimeMillis()
+            tempAllows = fetchTempAllows(context)
             upstreamDns = prefs.getString(PreferenceKeys.KEY_UPSTREAM_DNS, PreferenceKeys.DEFAULT_UPSTREAM_DNS)
                 ?: PreferenceKeys.DEFAULT_UPSTREAM_DNS
             kotlinx.coroutines.delay(if (isProtected) 1200L else 2500L)
@@ -266,6 +271,63 @@ fun LiveMonitorScreen(
         }
     }
 
+    // "Allow once" — a one-hour reprieve via the in-memory overlay. Takes effect immediately (the
+    // resolver reads it live) with no allowlist change and no VPN reload, so it's the safe undo for
+    // a false positive without permanently weakening protection.
+    fun allowOnce(domain: String) {
+        if (domain.startsWith("phone:")) return
+        val normalized = com.clearguard.app.blocking.HostBlocker.normalizeDomain(domain) ?: domain
+        com.clearguard.app.blocking.HostBlocker.get(context).allowTemporarily(normalized, 60L * 60L * 1000L)
+        queries = ClearGuardVpnService.recentBlocked()
+        tempAllows = fetchTempAllows(context)
+    }
+
+    // Cancel an active reprieve early — protection on this domain resumes immediately (read live).
+    fun revokeAllowOnce(domain: String) {
+        com.clearguard.app.blocking.HostBlocker.get(context).clearTemporaryAllow(domain)
+        tempAllows = fetchTempAllows(context)
+    }
+
+    // "Report false block" — records the block locally (never uploaded) and grants a one-hour
+    // reprieve so the user isn't stuck while it's noted.
+    fun reportFalseBlock(query: ClearGuardVpnService.BlockedQuery) {
+        val normalized = com.clearguard.app.blocking.HostBlocker.normalizeDomain(query.domain) ?: query.domain
+        val entry = normalized + "\t" + query.reason + "\t" + System.currentTimeMillis()
+        PreferenceKeys.addToStringSet(context, PreferenceKeys.KEY_REPORTED_FALSE_POSITIVES, entry)
+        if (!query.domain.startsWith("phone:")) {
+            com.clearguard.app.blocking.HostBlocker.get(context).allowTemporarily(normalized, 60L * 60L * 1000L)
+        }
+        queries = ClearGuardVpnService.recentBlocked()
+        tempAllows = fetchTempAllows(context)
+        reportedFPs = fetchReportedFalsePositives(context)
+    }
+
+    // Resolve a reported false block by permanently allowlisting the domain, then clearing the
+    // report and any redundant short-term reprieve.
+    fun allowReportedDomain(item: ReportedFalseBlock) {
+        if (!item.domain.startsWith("phone:")) {
+            allow(item.domain)
+            com.clearguard.app.blocking.HostBlocker.get(context).clearTemporaryAllow(item.domain)
+        }
+        PreferenceKeys.removeFromStringSet(context, PreferenceKeys.KEY_REPORTED_FALSE_POSITIVES, item.raw)
+        reportedFPs = fetchReportedFalsePositives(context)
+        tempAllows = fetchTempAllows(context)
+    }
+
+    // Remove a single report without changing any block/allow rule.
+    fun dismissReport(item: ReportedFalseBlock) {
+        PreferenceKeys.removeFromStringSet(context, PreferenceKeys.KEY_REPORTED_FALSE_POSITIVES, item.raw)
+        reportedFPs = fetchReportedFalsePositives(context)
+    }
+
+    fun clearAllReports() {
+        reportedFPs.forEach {
+            PreferenceKeys.removeFromStringSet(context, PreferenceKeys.KEY_REPORTED_FALSE_POSITIVES, it.raw)
+        }
+        reportedFPs = fetchReportedFalsePositives(context)
+    }
+
+    val tempAllowKeys = remember(tempAllows) { tempAllows.mapTo(mutableSetOf()) { it.first } }
     val blockedCount = remember(queries) { queries.count { it.blocked } }
     val allowedCount = remember(queries) { queries.count { !it.blocked } }
     val threatCount = remember(queries) { queries.count { it.status == "threat" || it.status == "bypass" } }
@@ -286,6 +348,15 @@ fun LiveMonitorScreen(
                     blockedCount = blockedCount,
                     threatCount = threatCount
                 )
+            }
+
+            if (tempAllows.isNotEmpty()) {
+                item {
+                    TemporaryAllowCard(
+                        entries = tempAllows,
+                        onRevoke = { revokeAllowOnce(it) }
+                    )
+                }
             }
 
             item {
@@ -323,8 +394,21 @@ fun LiveMonitorScreen(
                     queries = queries,
                     nowMillis = nowMillis,
                     isProtected = isProtected,
+                    tempAllowKeys = tempAllowKeys,
                     onSelectQuery = { selectedQuery = it }
                 )
+            }
+
+            if (reportedFPs.isNotEmpty()) {
+                item {
+                    ReportedFalseBlocksCard(
+                        items = reportedFPs,
+                        nowMillis = nowMillis,
+                        onAllow = { allowReportedDomain(it) },
+                        onDismiss = { dismissReport(it) },
+                        onClearAll = { clearAllReports() }
+                    )
+                }
             }
         }
 
@@ -363,8 +447,16 @@ fun LiveMonitorScreen(
                         allow(query.domain)
                         selectedQuery = null
                     },
+                    onAllowOnce = {
+                        allowOnce(query.domain)
+                        selectedQuery = null
+                    },
                     onBlock = {
                         block(query.domain)
+                        selectedQuery = null
+                    },
+                    onReport = {
+                        reportFalseBlock(query)
                         selectedQuery = null
                     }
                 )
@@ -725,6 +817,7 @@ private fun TerminalLogsCard(
     queries: List<ClearGuardVpnService.BlockedQuery>,
     nowMillis: Long,
     isProtected: Boolean,
+    tempAllowKeys: Set<String>,
     onSelectQuery: (ClearGuardVpnService.BlockedQuery) -> Unit
 ) {
     GlassCard(
@@ -764,6 +857,7 @@ private fun TerminalLogsCard(
                         TerminalLogRow(
                             query = query,
                             nowMillis = nowMillis,
+                            temporarilyAllowed = query.blocked && isDomainTemporarilyAllowed(query.domain, tempAllowKeys),
                             onClick = { onSelectQuery(query) }
                         )
                     }
@@ -777,6 +871,7 @@ private fun TerminalLogsCard(
 private fun TerminalLogRow(
     query: ClearGuardVpnService.BlockedQuery,
     nowMillis: Long,
+    temporarilyAllowed: Boolean,
     onClick: () -> Unit
 ) {
     val accent = queryAccent(query)
@@ -819,15 +914,37 @@ private fun TerminalLogRow(
         }
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = query.domain,
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = query.domain,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (temporarilyAllowed) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.green.copy(alpha = 0.16f))
+                            .border(1.dp, MaterialTheme.colorScheme.green.copy(alpha = 0.30f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "ALLOWED",
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.green,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
             Text(
                 text = "${relativeLogTime(nowMillis - query.timeMillis)} | ${cleanAppName(query)} | ${query.reason}",
                 fontSize = 10.sp,
@@ -890,10 +1007,16 @@ private fun ProDomainInspector(
     query: ClearGuardVpnService.BlockedQuery,
     onDismiss: () -> Unit,
     onAllow: () -> Unit,
-    onBlock: () -> Unit
+    onAllowOnce: () -> Unit,
+    onBlock: () -> Unit,
+    onReport: () -> Unit
 ) {
     val accent = queryAccent(query)
     val category = domainCategory(query)
+    val explanation = remember(query.domain, query.reason, query.status, query.threatScore, query.blocked) {
+        com.clearguard.app.security.BlockExplainer.explain(query)
+    }
+    val isPhoneEvent = query.domain.startsWith("phone:")
     val route = when {
         query.blocked -> "Local sinkhole"
         query.reason.equals("Cache hit", ignoreCase = true) -> "Local cache"
@@ -949,6 +1072,15 @@ private fun ProDomainInspector(
 
             Spacer(Modifier.height(14.dp))
 
+            BlockExplanationCard(explanation)
+
+            if (explanation.showHelpline) {
+                Spacer(Modifier.height(10.dp))
+                CyberHelplineCard()
+            }
+
+            Spacer(Modifier.height(12.dp))
+
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 InspectorMetric("CATEGORY", category, accent, Modifier.weight(1f))
                 InspectorMetric("SCORE", query.threatScore.coerceAtLeast(if (query.blocked) 20 else 0).toString(), MaterialTheme.colorScheme.warning, Modifier.weight(0.72f))
@@ -999,34 +1131,379 @@ private fun ProDomainInspector(
 
             Spacer(Modifier.height(16.dp))
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PrimaryButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
-                    accent = MaterialTheme.colorScheme.muted,
-                    contentColor = MaterialTheme.colorScheme.muted
+            when {
+                // Phone / call events aren't DNS domains, so allow/block don't apply.
+                isPhoneEvent -> {
+                    PrimaryButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth(),
+                        accent = MaterialTheme.colorScheme.muted,
+                        contentColor = Color.White
+                    ) {
+                        Text("Close", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    }
+                }
+                query.blocked -> {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SecondaryButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                            Text("Close", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.muted)
+                        }
+                        PrimaryButton(
+                            onClick = onAllowOnce,
+                            modifier = Modifier.weight(1f),
+                            accent = MaterialTheme.colorScheme.green,
+                            contentColor = Color.White
+                        ) {
+                            Text("Allow 1 hour", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PrimaryButton(
+                            onClick = onAllow,
+                            modifier = Modifier.weight(1f),
+                            accent = MaterialTheme.colorScheme.blue,
+                            contentColor = Color.White
+                        ) {
+                            Text("Allow always", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                        SecondaryButton(onClick = onReport, modifier = Modifier.weight(1f)) {
+                            Text("Report false block", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.warning)
+                        }
+                    }
+                }
+                else -> {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SecondaryButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                            Text("Close", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.muted)
+                        }
+                        PrimaryButton(
+                            onClick = onBlock,
+                            modifier = Modifier.weight(1.45f),
+                            accent = MaterialTheme.colorScheme.danger,
+                            contentColor = Color.White
+                        ) {
+                            Text("Block Domain", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun fetchTempAllows(context: android.content.Context): List<Pair<String, Long>> =
+    com.clearguard.app.blocking.HostBlocker.get(context).temporaryAllowSnapshot()
+        .map { it.key to it.value }
+        .sortedByDescending { it.second }
+
+/**
+ * Whether a queried domain is covered by an active "Allow once" reprieve — subdomain-aware, mirroring
+ * HostBlocker's own walk-up so a reprieve on example.com badges ads.example.com too.
+ */
+private fun isDomainTemporarilyAllowed(domain: String, allowedKeys: Set<String>): Boolean {
+    if (allowedKeys.isEmpty() || domain.startsWith("phone:")) return false
+    var cursor = com.clearguard.app.blocking.HostBlocker.normalizeDomain(domain) ?: return false
+    while (true) {
+        if (allowedKeys.contains(cursor)) return true
+        val dot = cursor.indexOf('.')
+        if (dot < 0) return false
+        cursor = cursor.substring(dot + 1)
+    }
+}
+
+/** A false-block the user reported, stored locally as "domain\treason\ttimestamp". */
+private data class ReportedFalseBlock(
+    val raw: String,
+    val domain: String,
+    val reason: String,
+    val timestamp: Long
+)
+
+private fun fetchReportedFalsePositives(context: android.content.Context): List<ReportedFalseBlock> =
+    PreferenceKeys.stringSetSorted(context, PreferenceKeys.KEY_REPORTED_FALSE_POSITIVES)
+        .mapNotNull { raw ->
+            val parts = raw.split("\t")
+            val domain = parts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            ReportedFalseBlock(
+                raw = raw,
+                domain = domain,
+                reason = parts.getOrNull(1).orEmpty(),
+                timestamp = parts.getOrNull(2)?.toLongOrNull() ?: 0L
+            )
+        }
+        .sortedByDescending { it.timestamp }
+
+/** Day-aware "Xm/Xh/Xd ago" label for the reported-false-block list. */
+private fun relativeReportTime(deltaMillis: Long): String {
+    if (deltaMillis < 0) return "just now"
+    val seconds = deltaMillis / 1000
+    return when {
+        seconds < 60 -> "just now"
+        seconds < 3600 -> "${seconds / 60}m ago"
+        seconds < 86_400 -> "${seconds / 3600}h ago"
+        else -> "${seconds / 86_400}d ago"
+    }
+}
+
+/**
+ * Lists the false-block reports the user filed (stored on-device only). Each can be resolved with
+ * "Allow always" (promote to the allowlist) or dismissed. Without this the reports were write-only.
+ * Only shown when at least one report exists.
+ */
+@Composable
+private fun ReportedFalseBlocksCard(
+    items: List<ReportedFalseBlock>,
+    nowMillis: Long,
+    onAllow: (ReportedFalseBlock) -> Unit,
+    onDismiss: (ReportedFalseBlock) -> Unit,
+    onClearAll: () -> Unit
+) {
+    val accent = MaterialTheme.colorScheme.warning
+    GlassCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Flag, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Reported false blocks",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.text
+                    )
+                    Text(
+                        "Stored on this device only — never uploaded.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.muted,
+                        lineHeight = 15.sp
+                    )
+                }
+                if (items.size > 1) {
+                    SecondaryButton(onClick = onClearAll) {
+                        Text("Clear all", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
+                    }
+                }
+            }
+            items.forEach { item ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        item.domain,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    val meta = buildString {
+                        if (item.reason.isNotBlank()) append(item.reason)
+                        if (item.timestamp > 0L) {
+                            if (isNotEmpty()) append(" · ")
+                            append(relativeReportTime(nowMillis - item.timestamp))
+                        }
+                    }
+                    if (meta.isNotBlank()) {
+                        Text(
+                            meta,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.muted,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            lineHeight = 15.sp
+                        )
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PrimaryButton(
+                            onClick = { onAllow(item) },
+                            modifier = Modifier.weight(1f),
+                            accent = MaterialTheme.colorScheme.green,
+                            contentColor = Color.White
+                        ) {
+                            Text("Allow always", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        }
+                        SecondaryButton(onClick = { onDismiss(item) }, modifier = Modifier.weight(1f)) {
+                            Text("Dismiss", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "59m" / "45s" style remaining-time label for an active reprieve. */
+private fun formatReprieve(millis: Long): String {
+    val minutes = (millis / 60_000L).toInt()
+    if (minutes >= 1) return "${minutes}m"
+    val seconds = (millis / 1000L).toInt().coerceAtLeast(1)
+    return "${seconds}s"
+}
+
+/**
+ * Surfaces the "Allow once" reprieves that are currently in effect, with a live countdown and a
+ * one-tap Undo. Without this the temporary allows are invisible — you can't tell a domain is open
+ * or pull it back early. Only shown while at least one reprieve is active.
+ */
+@Composable
+private fun TemporaryAllowCard(
+    entries: List<Pair<String, Long>>,
+    onRevoke: (String) -> Unit
+) {
+    val accent = MaterialTheme.colorScheme.green
+    GlassCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Timer, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Temporarily allowed",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.text
+                    )
+                    Text(
+                        if (entries.size == 1) "1 domain allowed for now — protection resumes automatically."
+                        else "${entries.size} domains allowed for now — protection resumes automatically.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.muted,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+            entries.forEach { (domain, remaining) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Close", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                }
-                if (query.blocked) {
-                    PrimaryButton(
-                        onClick = onAllow,
-                        modifier = Modifier.weight(1.45f),
-                        accent = MaterialTheme.colorScheme.green,
-                        contentColor = MaterialTheme.colorScheme.green
-                    ) {
-                        Text("Allow Domain", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            domain,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text("${formatReprieve(remaining)} left", fontSize = 11.sp, color = accent)
                     }
-                } else {
-                    PrimaryButton(
-                        onClick = onBlock,
-                        modifier = Modifier.weight(1.45f),
-                        accent = MaterialTheme.colorScheme.danger,
-                        contentColor = MaterialTheme.colorScheme.danger
-                    ) {
-                        Text("Block Domain", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(Modifier.width(8.dp))
+                    SecondaryButton(onClick = { onRevoke(domain) }) {
+                        Text("Undo", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BlockExplanationCard(explanation: com.clearguard.app.security.BlockExplainer.Explanation) {
+    val accent = when (explanation.severity) {
+        com.clearguard.app.security.BlockExplainer.Severity.HIGH -> MaterialTheme.colorScheme.danger
+        com.clearguard.app.security.BlockExplainer.Severity.MEDIUM -> MaterialTheme.colorScheme.warning
+        com.clearguard.app.security.BlockExplainer.Severity.LOW -> MaterialTheme.colorScheme.blue
+        com.clearguard.app.security.BlockExplainer.Severity.INFO -> MaterialTheme.colorScheme.muted
+    }
+    val icon = when (explanation.severity) {
+        com.clearguard.app.security.BlockExplainer.Severity.HIGH -> Icons.Default.GppMaybe
+        com.clearguard.app.security.BlockExplainer.Severity.MEDIUM -> Icons.Default.Warning
+        com.clearguard.app.security.BlockExplainer.Severity.LOW -> Icons.Default.Shield
+        com.clearguard.app.security.BlockExplainer.Severity.INFO -> Icons.Default.Info
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(accent.copy(alpha = 0.10f))
+            .border(1.dp, accent.copy(alpha = 0.26f), RoundedCornerShape(14.dp))
+            .padding(13.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                explanation.headline,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.text
+            )
+        }
+        Text(explanation.detail, fontSize = 13.sp, color = MaterialTheme.colorScheme.text, lineHeight = 18.sp)
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(Icons.Default.TipsAndUpdates, contentDescription = null, tint = accent, modifier = Modifier.size(15.dp).padding(top = 1.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(explanation.advice, fontSize = 12.sp, color = MaterialTheme.colorScheme.muted, lineHeight = 16.sp)
+        }
+    }
+}
+
+@Composable
+private fun CyberHelplineCard() {
+    val context = LocalContext.current
+    val accent = MaterialTheme.colorScheme.danger
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(accent.copy(alpha = 0.08f))
+            .border(1.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
+            .padding(13.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            "Report cyber fraud (official)",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.text
+        )
+        Text(
+            "If money was lost, report fast — the first hours matter most.",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.muted,
+            lineHeight = 16.sp
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PrimaryButton(
+                onClick = {
+                    try {
+                        context.startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_DIAL, Uri.parse("tel:1930"))
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    } catch (_: Exception) {}
+                },
+                modifier = Modifier.weight(1f),
+                accent = accent,
+                contentColor = Color.White
+            ) {
+                Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Call 1930", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+            SecondaryButton(
+                onClick = {
+                    try {
+                        context.startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse("https://cybercrime.gov.in"))
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    } catch (_: Exception) {}
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("cybercrime.gov.in", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
