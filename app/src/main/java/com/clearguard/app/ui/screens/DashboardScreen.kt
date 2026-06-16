@@ -16,7 +16,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +51,7 @@ fun DashboardScreen(
 ) {
     val context = LocalContext.current
     val prefs = remember { PreferenceKeys.prefs(context) }
+    val haptics = LocalHapticFeedback.current
 
     var currentMode by remember { mutableStateOf(PreferenceKeys.getCurrentMode(context)) }
 
@@ -56,14 +59,17 @@ fun DashboardScreen(
     var adsEnabled by remember {
         mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_AI_AD_PATTERN_DETECTOR_ENABLED, PreferenceKeys.DEFAULT_AI_AD_PATTERN_DETECTOR_ENABLED))
     }
-    var familyEnabled by remember { mutableStateOf(PreferenceKeys.getCurrentMode(context) == "kids") }
+    // Family/Kids and Battery Saver are just views onto the single protection mode, so derive them
+    // from currentMode instead of holding independent state. This keeps these shield switches in
+    // sync with the Protection Mode chips below (picking a different mode now turns them off).
+    val familyEnabled = currentMode == "kids"
     var trackersEnabled by remember {
         mutableStateOf(
             prefs.getBoolean(PreferenceKeys.KEY_BROWSER_ANTI_FINGERPRINT, PreferenceKeys.DEFAULT_BROWSER_ANTI_FINGERPRINT) &&
             prefs.getBoolean(PreferenceKeys.KEY_BROWSER_COOKIE_REMOVER, PreferenceKeys.DEFAULT_BROWSER_COOKIE_REMOVER)
         )
     }
-    var gamingEnabled by remember { mutableStateOf(PreferenceKeys.getCurrentMode(context) == "battery") }
+    val gamingEnabled = currentMode == "battery"
     var malwareEnabled by remember {
         mutableStateOf(
             prefs.getBoolean(PreferenceKeys.KEY_MOBILE_RISK_SCORING_ENABLED, PreferenceKeys.DEFAULT_MOBILE_RISK_SCORING_ENABLED) &&
@@ -81,7 +87,6 @@ fun DashboardScreen(
             com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(context)
         },
         ShieldItem("Family / Kids", Icons.Default.FamilyRestroom, familyEnabled) { enabled ->
-            familyEnabled = enabled
             val mode = if (enabled) "kids" else "default"
             prefs.edit().putString(PreferenceKeys.KEY_PROTECTION_MODE, mode).apply()
             com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(context)
@@ -95,7 +100,6 @@ fun DashboardScreen(
                 .apply()
         },
         ShieldItem("Battery Saver", Icons.Default.BatterySaver, gamingEnabled) { enabled ->
-            gamingEnabled = enabled
             val mode = if (enabled) "battery" else "default"
             prefs.edit().putString(PreferenceKeys.KEY_PROTECTION_MODE, mode).apply()
             com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(context)
@@ -171,7 +175,10 @@ fun DashboardScreen(
 
             // Classy, prominent action button (the heart of the experience)
             LiquidGlassButton(
-                onClick = { onToggleProtection(!isProtected) },
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggleProtection(!isProtected)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

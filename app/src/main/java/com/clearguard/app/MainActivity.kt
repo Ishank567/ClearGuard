@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clearguard.app.blocking.BlocklistUpdateWorker
 import com.clearguard.app.blocking.HostBlocker
+import com.clearguard.app.ui.screens.ActivityScreen
 import com.clearguard.app.ui.screens.BlocklistsScreen
 import com.clearguard.app.ui.screens.BrowserScreen
 import com.clearguard.app.ui.screens.DashboardScreen
@@ -86,6 +87,7 @@ import kotlinx.coroutines.isActive
 
 enum class AppScreen(val title: String, val icon: ImageVector) {
     Dashboard("Home", Icons.Default.Shield),
+    Activity("Activity", Icons.Default.History),
     Privacy("Privacy", Icons.Default.VerifiedUser),
     Browser("Browser", Icons.Default.Language),
     Blocklists("Lists", Icons.AutoMirrored.Filled.List),
@@ -180,11 +182,16 @@ fun ClearGuardApp(
                 .getBoolean(PreferenceKeys.KEY_ONBOARDING_SEEN, false)
         )
     }
+    // Set once the user finishes onboarding with "Activate Protection"; consumed by a
+    // LaunchedEffect below to kick off the VPN consent flow immediately (one-tap setup).
+    var autoStartAfterOnboarding by remember { mutableStateOf(false) }
+
     if (showOnboarding) {
-        OnboardingScreen(onComplete = {
+        OnboardingScreen(onComplete = { startProtection ->
             PreferenceKeys.prefs(context).edit()
                 .putBoolean(PreferenceKeys.KEY_ONBOARDING_SEEN, true)
                 .apply()
+            autoStartAfterOnboarding = startProtection
             showOnboarding = false
         })
         return
@@ -212,24 +219,31 @@ fun ClearGuardApp(
     val dohEnabledState = remember { mutableStateOf(loadDohEnabled(context)) }
     val dohQueryState = remember { mutableStateOf(loadDohQueries(context)) }
 
+    // Single source of truth for refreshing all stat states (was duplicated in the broadcast
+    // receiver and the poll loop). Assigning equal values is a no-op for Compose, so this stays
+    // cheap. Used by both the live broadcast (immediate) and the periodic safety-net poll.
+    val refreshStats = {
+        blockedTodayState.value = loadBlockedToday(context)
+        blockedTotalState.value = loadBlockedTotal(context)
+        allowedTotalState.value = loadAllowedTotal(context)
+        activeRulesState.value = loadActiveRules(context)
+        cacheHitState.value = loadCacheHits(context)
+        scamBlockedState.value = loadScamBlocked(context)
+        scamBlockedTodayState.value = loadScamBlockedToday(context)
+        scamShieldEnabledState.value = loadScamShieldEnabled(context)
+        indianScamShieldEnabledState.value = loadIndianScamShieldEnabled(context)
+        upstreamQueryState.value = loadUpstreamQueries(context)
+        upstreamLatencyState.value = loadUpstreamAverageLatency(context)
+        dohEnabledState.value = loadDohEnabled(context)
+        dohQueryState.value = loadDohQueries(context)
+    }
+
     // Listen for live stats updates from the VPN service (makes increments very visible)
     DisposableEffect(Unit) {
         val receiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
                 if (intent?.action == ClearGuardVpnService.ACTION_STATS_CHANGED) {
-                    blockedTodayState.value = loadBlockedToday(context)
-                    blockedTotalState.value = loadBlockedTotal(context)
-                    allowedTotalState.value = loadAllowedTotal(context)
-                    activeRulesState.value = loadActiveRules(context)
-                    cacheHitState.value = loadCacheHits(context)
-                    scamBlockedState.value = loadScamBlocked(context)
-                    scamBlockedTodayState.value = loadScamBlockedToday(context)
-                    scamShieldEnabledState.value = loadScamShieldEnabled(context)
-                    indianScamShieldEnabledState.value = loadIndianScamShieldEnabled(context)
-                    upstreamQueryState.value = loadUpstreamQueries(context)
-                    upstreamLatencyState.value = loadUpstreamAverageLatency(context)
-                    dohEnabledState.value = loadDohEnabled(context)
-                    dohQueryState.value = loadDohQueries(context)
+                    refreshStats()
                 }
             }
         }
@@ -275,32 +289,33 @@ fun ClearGuardApp(
         }
     }
 
-    // Periodic sync + service state (backup to broadcast)
+    // One-tap setup: if the user tapped "Activate Protection" at the end of onboarding, start the
+    // VPN consent flow as soon as the main UI is ready (runs once; no-op if already protected).
+    LaunchedEffect(autoStartAfterOnboarding) {
+        if (autoStartAfterOnboarding) {
+            autoStartAfterOnboarding = false
+            if (!ClearGuardVpnService.isRunning()) {
+                toggleProtection(true)
+            }
+        }
+    }
+
+    // Periodic safety-net sync + service liveness (the broadcast above drives immediate updates;
+    // the service only flushes stats every ~15s, so this poll is intentionally unhurried).
     LaunchedEffect(Unit) {
         while (isActive) {
             isProtected = ClearGuardVpnService.isRunning()
-            blockedTodayState.value = loadBlockedToday(context)
-            blockedTotalState.value = loadBlockedTotal(context)
-            allowedTotalState.value = loadAllowedTotal(context)
-            activeRulesState.value = loadActiveRules(context)
-            cacheHitState.value = loadCacheHits(context)
-            scamBlockedState.value = loadScamBlocked(context)
-            scamBlockedTodayState.value = loadScamBlockedToday(context)
-            scamShieldEnabledState.value = loadScamShieldEnabled(context)
-            indianScamShieldEnabledState.value = loadIndianScamShieldEnabled(context)
-            upstreamQueryState.value = loadUpstreamQueries(context)
-            upstreamLatencyState.value = loadUpstreamAverageLatency(context)
-            dohEnabledState.value = loadDohEnabled(context)
-            dohQueryState.value = loadDohQueries(context)
-            delay(if (isProtected) 3000L else 8000L)
+            refreshStats()
+            delay(if (isProtected) 5000L else 12000L)
         }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
     Scaffold(
         topBar = {
-            // Clean, minimal top bar — title only when needed. Dashboard has its own strong hero.
-            if (currentScreen != AppScreen.Dashboard) {
+            // Clean, minimal top bar — title only when needed. Dashboard has its own strong hero,
+            // and Activity renders its own header row (with the Clear action), so skip both.
+            if (currentScreen != AppScreen.Dashboard && currentScreen != AppScreen.Activity) {
                 TopAppBar(
                     title = {
                         Text(
@@ -380,6 +395,7 @@ fun ClearGuardApp(
                     dohQueries = dohQueryState.value,
                     initialScanText = sharedScamText
                 )
+                AppScreen.Activity -> ActivityScreen(isProtected = isProtected)
                 AppScreen.Browser -> BrowserScreen()
                 AppScreen.Blocklists -> BlocklistsScreen()
                 AppScreen.Settings -> SettingsScreen(
