@@ -61,6 +61,5 @@ fun ShieldDNSTheme(content: @Composable () -> Unit) {
     )
 }
 
-// Back-compat alias so old call sites don't all explode at once.
 @Composable
 fun ClearGuardTheme(content: @Composable () -> Unit) = ShieldDNSTheme(content = content)

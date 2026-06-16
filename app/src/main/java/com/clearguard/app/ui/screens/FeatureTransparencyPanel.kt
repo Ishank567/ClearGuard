@@ -56,7 +56,6 @@ fun FeatureTransparencyPanel(
     GlassCard(
         modifier = modifier.fillMaxWidth(),
         cornerRadius = 22.dp,
-        glassAlpha = if (compact) 0.82f else 0.86f,
         elevation = 10.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {

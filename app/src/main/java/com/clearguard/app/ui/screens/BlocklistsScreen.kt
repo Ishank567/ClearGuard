@@ -500,7 +500,7 @@ fun BlocklistsScreen() {
                             Text("${conflicts.size} conflict(s) found:", fontWeight = FontWeight.Medium, fontSize = 13.sp)
                             conflicts.forEach { conflict ->
                                 Spacer(Modifier.height(6.dp))
-                                GlassCard(glassAlpha = 0.7f) {
+                                GlassCard {
                                     Column(modifier = Modifier.padding(12.dp)) {
                                         Text(conflict.domain, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.danger)
                                         Text("${conflict.type}: ${conflict.description}", fontSize = 12.sp, color = MaterialTheme.colorScheme.text)
@@ -797,7 +797,6 @@ private fun EntryRow(
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 18.dp,
-        glassAlpha = 0.82f,
         elevation = 8.dp
     ) {
         Row(
@@ -855,7 +854,6 @@ private fun GlassListItem(row: BlocklistRow) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 18.dp,
-        glassAlpha = 0.82f,
         elevation = 8.dp
     ) {
         Row(
@@ -898,7 +896,6 @@ private fun buildBackupJson(context: android.content.Context): String {
     settings.put("bypass_guard_enabled", prefs.getBoolean(PreferenceKeys.KEY_BYPASS_GUARD_ENABLED, PreferenceKeys.DEFAULT_BYPASS_GUARD_ENABLED))
     settings.put("auto_update_enabled", prefs.getBoolean(PreferenceKeys.KEY_AUTO_UPDATE_ENABLED, PreferenceKeys.DEFAULT_AUTO_UPDATE_ENABLED))
     settings.put("resume_on_boot", prefs.getBoolean(PreferenceKeys.KEY_RESUME_ON_BOOT, PreferenceKeys.DEFAULT_RESUME_ON_BOOT))
-    settings.put("theme_mode", PreferenceKeys.DEFAULT_THEME_MODE)
     root.put("settings", settings)
 
     return root.toString(2)
@@ -1010,7 +1007,6 @@ private fun applyBackupJson(context: android.content.Context, raw: String): Stri
         if (settings.has("resume_on_boot")) {
             editor.putBoolean(PreferenceKeys.KEY_RESUME_ON_BOOT, settings.optBoolean("resume_on_boot", PreferenceKeys.DEFAULT_RESUME_ON_BOOT))
         }
-        editor.putString(PreferenceKeys.KEY_THEME_MODE, PreferenceKeys.DEFAULT_THEME_MODE)
     }
 
     editor.apply()

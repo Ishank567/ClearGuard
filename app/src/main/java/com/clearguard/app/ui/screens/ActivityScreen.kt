@@ -410,7 +410,6 @@ private fun QueryRow(
             .fillMaxWidth()
             .clickable { onClick() },
         cornerRadius = 18.dp,
-        glassAlpha = 0.82f,
         elevation = 8.dp
     ) {
         Row(
@@ -517,7 +516,6 @@ private fun DomainDetailPanel(
             .fillMaxWidth()
             .padding(16.dp),
         cornerRadius = 24.dp,
-        glassAlpha = 0.94f,
         elevation = 28.dp
     ) {
         Column(

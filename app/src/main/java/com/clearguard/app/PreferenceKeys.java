@@ -57,8 +57,6 @@ public final class PreferenceKeys {
     public static final String KEY_RESUME_ON_BOOT = "resume_on_boot";
     /** Tracks whether the user last wanted protection on, so it can resume after a reboot. */
     public static final String KEY_PROTECTION_DESIRED = "protection_desired";
-    /** Legacy appearance key — app is light-only; always stored as "light". */
-    public static final String KEY_THEME_MODE = "theme_mode";
     /** Package names excluded from the VPN (their traffic bypasses filtering). */
     public static final String KEY_EXCLUDED_APPS = "excluded_apps";
     /** JSON object of domain -> block count, maintained by the VPN service. */
@@ -100,22 +98,6 @@ public final class PreferenceKeys {
     public static final String KEY_IG_ADS_SKIPPED_TODAY = "ig_ads_skipped_today";
     /** ISO date (yyyy-MM-dd) the "today" skip counter belongs to, for daily rollover. */
     public static final String KEY_IG_ADS_SKIPPED_DAY = "ig_ads_skipped_day";
-    public static final String KEY_BROWSER_COOKIE_REMOVER = "browser_cookie_remover";
-    public static final String KEY_BROWSER_ANTI_FINGERPRINT = "browser_anti_fingerprint";
-    public static final String KEY_BROWSER_CLEANER_RULES = "browser_cleaner_rules";
-    public static final String KEY_BROWSER_DARK_PATTERN_BLOCKER = "browser_dark_pattern_blocker";
-    public static final String KEY_BROWSER_FAKE_PHONE_WARNER = "browser_fake_phone_warner";
-
-    // Anti-adblock bypass tools (advanced, for users who encounter detection)
-    public static final String KEY_BROWSER_SCRIPTLET_INJECTION = "browser_scriptlet_injection";
-    public static final String KEY_BROWSER_ANTI_ADBLOCK_DEFUSER = "browser_anti_adblock_defuser";
-    public static final String KEY_BROWSER_POPUP_TRAP_BLOCKER = "browser_popup_trap_blocker";
-    public static final String KEY_BROWSER_REDIRECT_CHAIN_CLEANER = "browser_redirect_chain_cleaner";
-    public static final String KEY_BROWSER_ANTI_PAYWALL_WARNING = "browser_anti_paywall_warning";
-    public static final String KEY_BROWSER_SPONSORED_WIDGET_REMOVER = "browser_sponsored_widget_remover";
-    public static final String KEY_BROWSER_FAKE_COUNTDOWN_REMOVER = "browser_fake_countdown_remover";
-    public static final String KEY_BROWSER_OVERLAY_REMOVER = "browser_overlay_remover";
-
     /** Intent-based protection mode (Study / Work / Kids / Elder / Shopping / Spiritual / BatterySaver / Default). */
     public static final String KEY_PROTECTION_MODE = "protection_mode";
     public static final String DEFAULT_PROTECTION_MODE = "default";
@@ -180,7 +162,6 @@ public final class PreferenceKeys {
     public static final boolean DEFAULT_AUTO_UPDATE_ENABLED = true;
     public static final boolean DEFAULT_BYPASS_GUARD_ENABLED = true;
     public static final boolean DEFAULT_RESUME_ON_BOOT = true;
-    public static final String DEFAULT_THEME_MODE = "light";
     private static final int DEFAULT_SOURCES_VERSION = 3;
 
     // ShieldDNS Defaults
@@ -192,21 +173,6 @@ public final class PreferenceKeys {
     public static final boolean DEFAULT_DATA_SAVER_ENABLED = false;
     public static final boolean DEFAULT_META_AD_PACK = false;
     public static final boolean DEFAULT_IG_AD_SKIPPER_ENABLED = false;
-    public static final boolean DEFAULT_BROWSER_COOKIE_REMOVER = true;
-    public static final boolean DEFAULT_BROWSER_ANTI_FINGERPRINT = true;
-    public static final boolean DEFAULT_BROWSER_DARK_PATTERN_BLOCKER = true;
-    public static final boolean DEFAULT_BROWSER_FAKE_PHONE_WARNER = true;
-
-    // Advanced anti-adblock tools default to off (user must opt-in)
-    public static final boolean DEFAULT_BROWSER_SCRIPTLET_INJECTION = false;
-    public static final boolean DEFAULT_BROWSER_ANTI_ADBLOCK_DEFUSER = false;
-    public static final boolean DEFAULT_BROWSER_POPUP_TRAP_BLOCKER = false;
-    public static final boolean DEFAULT_BROWSER_REDIRECT_CHAIN_CLEANER = false;
-    public static final boolean DEFAULT_BROWSER_ANTI_PAYWALL_WARNING = false;
-    public static final boolean DEFAULT_BROWSER_SPONSORED_WIDGET_REMOVER = false;
-    public static final boolean DEFAULT_BROWSER_FAKE_COUNTDOWN_REMOVER = false;
-    public static final boolean DEFAULT_BROWSER_OVERLAY_REMOVER = false;
-
     private PreferenceKeys() {
     }
 
@@ -314,9 +280,20 @@ public final class PreferenceKeys {
             editor.putBoolean(KEY_RESUME_ON_BOOT, DEFAULT_RESUME_ON_BOOT);
             changed = true;
         }
-        if (!DEFAULT_THEME_MODE.equals(prefs.getString(KEY_THEME_MODE, DEFAULT_THEME_MODE))) {
-            editor.putString(KEY_THEME_MODE, DEFAULT_THEME_MODE);
-            changed = true;
+        // Drop stale keys from removed features (in-app browser, theme picker).
+        for (String stale : new String[] {
+                "theme_mode",
+                "browser_cookie_remover", "browser_anti_fingerprint", "browser_cleaner_rules",
+                "browser_dark_pattern_blocker", "browser_fake_phone_warner",
+                "browser_scriptlet_injection", "browser_anti_adblock_defuser",
+                "browser_popup_trap_blocker", "browser_redirect_chain_cleaner",
+                "browser_anti_paywall_warning", "browser_sponsored_widget_remover",
+                "browser_fake_countdown_remover", "browser_overlay_remover"
+        }) {
+            if (prefs.contains(stale)) {
+                editor.remove(stale);
+                changed = true;
+            }
         }
         if (!prefs.contains(KEY_SECURITY_MODE)) {
             editor.putString(KEY_SECURITY_MODE, DEFAULT_SECURITY_MODE);
@@ -348,54 +325,6 @@ public final class PreferenceKeys {
         }
         if (!prefs.contains(KEY_IG_SKIP_SUGGESTED)) {
             editor.putBoolean(KEY_IG_SKIP_SUGGESTED, DEFAULT_IG_SKIP_SUGGESTED);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_COOKIE_REMOVER)) {
-            editor.putBoolean(KEY_BROWSER_COOKIE_REMOVER, DEFAULT_BROWSER_COOKIE_REMOVER);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_ANTI_FINGERPRINT)) {
-            editor.putBoolean(KEY_BROWSER_ANTI_FINGERPRINT, DEFAULT_BROWSER_ANTI_FINGERPRINT);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_DARK_PATTERN_BLOCKER)) {
-            editor.putBoolean(KEY_BROWSER_DARK_PATTERN_BLOCKER, DEFAULT_BROWSER_DARK_PATTERN_BLOCKER);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_FAKE_PHONE_WARNER)) {
-            editor.putBoolean(KEY_BROWSER_FAKE_PHONE_WARNER, DEFAULT_BROWSER_FAKE_PHONE_WARNER);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_SCRIPTLET_INJECTION)) {
-            editor.putBoolean(KEY_BROWSER_SCRIPTLET_INJECTION, DEFAULT_BROWSER_SCRIPTLET_INJECTION);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_ANTI_ADBLOCK_DEFUSER)) {
-            editor.putBoolean(KEY_BROWSER_ANTI_ADBLOCK_DEFUSER, DEFAULT_BROWSER_ANTI_ADBLOCK_DEFUSER);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_POPUP_TRAP_BLOCKER)) {
-            editor.putBoolean(KEY_BROWSER_POPUP_TRAP_BLOCKER, DEFAULT_BROWSER_POPUP_TRAP_BLOCKER);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_REDIRECT_CHAIN_CLEANER)) {
-            editor.putBoolean(KEY_BROWSER_REDIRECT_CHAIN_CLEANER, DEFAULT_BROWSER_REDIRECT_CHAIN_CLEANER);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_ANTI_PAYWALL_WARNING)) {
-            editor.putBoolean(KEY_BROWSER_ANTI_PAYWALL_WARNING, DEFAULT_BROWSER_ANTI_PAYWALL_WARNING);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_SPONSORED_WIDGET_REMOVER)) {
-            editor.putBoolean(KEY_BROWSER_SPONSORED_WIDGET_REMOVER, DEFAULT_BROWSER_SPONSORED_WIDGET_REMOVER);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_FAKE_COUNTDOWN_REMOVER)) {
-            editor.putBoolean(KEY_BROWSER_FAKE_COUNTDOWN_REMOVER, DEFAULT_BROWSER_FAKE_COUNTDOWN_REMOVER);
-            changed = true;
-        }
-        if (!prefs.contains(KEY_BROWSER_OVERLAY_REMOVER)) {
-            editor.putBoolean(KEY_BROWSER_OVERLAY_REMOVER, DEFAULT_BROWSER_OVERLAY_REMOVER);
             changed = true;
         }
         if (!prefs.contains(KEY_PROTECTION_MODE)) {

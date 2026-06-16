@@ -106,7 +106,6 @@ fun PrivacyScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             cornerRadius = 16.dp,
-            glassAlpha = 0.85f
         ) {
             BoxWithConstraints(
                 modifier = Modifier
@@ -475,7 +474,6 @@ private fun ProConsoleHeader(
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 22.dp,
-        glassAlpha = 0.86f,
         elevation = 12.dp
     ) {
         Column(
@@ -603,7 +601,6 @@ private fun DnsMonitorCard(
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 22.dp,
-        glassAlpha = 0.84f,
         elevation = 10.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -676,7 +673,6 @@ private fun NetworkGraphCard(
             .fillMaxWidth()
             .height(286.dp),
         cornerRadius = 22.dp,
-        glassAlpha = 0.82f,
         elevation = 10.dp
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -823,7 +819,6 @@ private fun TerminalLogsCard(
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 22.dp,
-        glassAlpha = 0.86f,
         elevation = 10.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1034,7 +1029,6 @@ private fun ProDomainInspector(
             .padding(14.dp)
             .heightIn(max = 560.dp),
         cornerRadius = 24.dp,
-        glassAlpha = 0.95f,
         elevation = 28.dp
     ) {
         Column(
@@ -2197,7 +2191,7 @@ fun ScamScreenshotScanner(initialText: String? = null) {
         }
 
         // Quick tip
-        GlassCard(glassAlpha = 0.5f) {
+        GlassCard {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Tip", fontWeight = FontWeight.Medium)
                 Text(
@@ -2698,7 +2692,6 @@ private fun ScamDetectionRow(det: ScamScreenshotAnalyzer.Detection) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        glassAlpha = 0.6f
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             // Severity stripe
