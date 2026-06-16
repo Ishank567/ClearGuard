@@ -57,7 +57,7 @@ public final class PreferenceKeys {
     public static final String KEY_RESUME_ON_BOOT = "resume_on_boot";
     /** Tracks whether the user last wanted protection on, so it can resume after a reboot. */
     public static final String KEY_PROTECTION_DESIRED = "protection_desired";
-    /** Appearance: "system", "light", or "dark". */
+    /** Legacy appearance key — app is light-only; always stored as "light". */
     public static final String KEY_THEME_MODE = "theme_mode";
     /** Package names excluded from the VPN (their traffic bypasses filtering). */
     public static final String KEY_EXCLUDED_APPS = "excluded_apps";
@@ -92,6 +92,14 @@ public final class PreferenceKeys {
      * access in system settings; this flag is the in-app on/off intent.
      */
     public static final String KEY_IG_AD_SKIPPER_ENABLED = "ig_ad_skipper_enabled";
+    /** Opt-in: also scroll past "Suggested for you" posts (non-followed content injected into the feed). */
+    public static final String KEY_IG_SKIP_SUGGESTED = "ig_skip_suggested";
+    public static final boolean DEFAULT_IG_SKIP_SUGGESTED = false;
+    /** Running counts of feed/Reels ads (and suggested posts) the skipper has scrolled past. */
+    public static final String KEY_IG_ADS_SKIPPED_TOTAL = "ig_ads_skipped_total";
+    public static final String KEY_IG_ADS_SKIPPED_TODAY = "ig_ads_skipped_today";
+    /** ISO date (yyyy-MM-dd) the "today" skip counter belongs to, for daily rollover. */
+    public static final String KEY_IG_ADS_SKIPPED_DAY = "ig_ads_skipped_day";
     public static final String KEY_BROWSER_COOKIE_REMOVER = "browser_cookie_remover";
     public static final String KEY_BROWSER_ANTI_FINGERPRINT = "browser_anti_fingerprint";
     public static final String KEY_BROWSER_CLEANER_RULES = "browser_cleaner_rules";
@@ -172,7 +180,7 @@ public final class PreferenceKeys {
     public static final boolean DEFAULT_AUTO_UPDATE_ENABLED = true;
     public static final boolean DEFAULT_BYPASS_GUARD_ENABLED = true;
     public static final boolean DEFAULT_RESUME_ON_BOOT = true;
-    public static final String DEFAULT_THEME_MODE = "system";
+    public static final String DEFAULT_THEME_MODE = "light";
     private static final int DEFAULT_SOURCES_VERSION = 3;
 
     // ShieldDNS Defaults
@@ -306,6 +314,10 @@ public final class PreferenceKeys {
             editor.putBoolean(KEY_RESUME_ON_BOOT, DEFAULT_RESUME_ON_BOOT);
             changed = true;
         }
+        if (!DEFAULT_THEME_MODE.equals(prefs.getString(KEY_THEME_MODE, DEFAULT_THEME_MODE))) {
+            editor.putString(KEY_THEME_MODE, DEFAULT_THEME_MODE);
+            changed = true;
+        }
         if (!prefs.contains(KEY_SECURITY_MODE)) {
             editor.putString(KEY_SECURITY_MODE, DEFAULT_SECURITY_MODE);
             changed = true;
@@ -332,6 +344,10 @@ public final class PreferenceKeys {
         }
         if (!prefs.contains(KEY_IG_AD_SKIPPER_ENABLED)) {
             editor.putBoolean(KEY_IG_AD_SKIPPER_ENABLED, DEFAULT_IG_AD_SKIPPER_ENABLED);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_IG_SKIP_SUGGESTED)) {
+            editor.putBoolean(KEY_IG_SKIP_SUGGESTED, DEFAULT_IG_SKIP_SUGGESTED);
             changed = true;
         }
         if (!prefs.contains(KEY_BROWSER_COOKIE_REMOVER)) {

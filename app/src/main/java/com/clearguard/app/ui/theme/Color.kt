@@ -16,7 +16,6 @@ object AppColors {
     val warning = Color(0xFFD97706)
     val danger = Color(0xFFDC2626)
     val mutedLight = Color(0xFF64748B)
-    val mutedDark = Color(0xFF94A3B8)
 }
 
 /**
@@ -37,7 +36,6 @@ object ClearColors {
     val glassBorder = Color(0xFFE2E8F0)
     val glassHighlight = Color.White.copy(alpha = 0.08f)
     val glassShadow = Color.Black.copy(alpha = 0.12f)
-    val glassDark = Color(0xFF1E2937)
     val useGlass = false
     val panel = Color(0xFFFFFFFF)
 }

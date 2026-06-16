@@ -45,7 +45,7 @@ import com.clearguard.app.PreferenceKeys
 import com.clearguard.app.blocking.BlocklistUpdateWorker
 import com.clearguard.app.ui.components.GlassCard
 import com.clearguard.app.ui.components.ClearSwitch
-import com.clearguard.app.ui.theme.ThemeMode
+
 import com.clearguard.app.vpn.ClearGuardVpnService
 
 /**
@@ -72,9 +72,7 @@ fun SettingsScreen(
     indianScamShieldEnabled: Boolean,
     onIndianScamShieldChange: (Boolean) -> Unit,
     dohEnabled: Boolean,
-    onDohEnabledChange: (Boolean) -> Unit,
-    themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit
+    onDohEnabledChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember { PreferenceKeys.prefs(context) }
@@ -145,6 +143,9 @@ fun SettingsScreen(
     }
     var igAdSkipper by remember {
         mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_IG_AD_SKIPPER_ENABLED, PreferenceKeys.DEFAULT_IG_AD_SKIPPER_ENABLED))
+    }
+    var igSkipSuggested by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_IG_SKIP_SUGGESTED, PreferenceKeys.DEFAULT_IG_SKIP_SUGGESTED))
     }
     var religiousClean by remember {
         mutableStateOf(prefs.getBoolean("religious_clean_enabled", false))
@@ -865,6 +866,42 @@ fun SettingsScreen(
                         Icon(Icons.Default.Accessibility, contentDescription = null, tint = MaterialTheme.colorScheme.warning, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Turn on Accessibility access", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.warning)
+                    }
+                }
+
+                if (igAdSkipper) {
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Also skip suggested posts", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                            Text(
+                                "Scroll past “Suggested for you” posts from accounts you don’t follow.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        ClearSwitch(
+                            checked = igSkipSuggested,
+                            onCheckedChange = {
+                                igSkipSuggested = it
+                                prefs.edit().putBoolean(PreferenceKeys.KEY_IG_SKIP_SUGGESTED, it).apply()
+                            }
+                        )
+                    }
+
+                    val igSkippedTotal = prefs.getLong(PreferenceKeys.KEY_IG_ADS_SKIPPED_TOTAL, 0L)
+                    if (igSkippedTotal > 0L) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Skipped $igSkippedTotal ads & suggested posts so far",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }

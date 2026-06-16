@@ -898,7 +898,7 @@ private fun buildBackupJson(context: android.content.Context): String {
     settings.put("bypass_guard_enabled", prefs.getBoolean(PreferenceKeys.KEY_BYPASS_GUARD_ENABLED, PreferenceKeys.DEFAULT_BYPASS_GUARD_ENABLED))
     settings.put("auto_update_enabled", prefs.getBoolean(PreferenceKeys.KEY_AUTO_UPDATE_ENABLED, PreferenceKeys.DEFAULT_AUTO_UPDATE_ENABLED))
     settings.put("resume_on_boot", prefs.getBoolean(PreferenceKeys.KEY_RESUME_ON_BOOT, PreferenceKeys.DEFAULT_RESUME_ON_BOOT))
-    settings.put("theme_mode", prefs.getString(PreferenceKeys.KEY_THEME_MODE, PreferenceKeys.DEFAULT_THEME_MODE))
+    settings.put("theme_mode", PreferenceKeys.DEFAULT_THEME_MODE)
     root.put("settings", settings)
 
     return root.toString(2)
@@ -1010,16 +1010,13 @@ private fun applyBackupJson(context: android.content.Context, raw: String): Stri
         if (settings.has("resume_on_boot")) {
             editor.putBoolean(PreferenceKeys.KEY_RESUME_ON_BOOT, settings.optBoolean("resume_on_boot", PreferenceKeys.DEFAULT_RESUME_ON_BOOT))
         }
-        val themeMode = settings.optString("theme_mode", "")
-        if (themeMode in listOf("system", "light", "dark")) {
-            editor.putString(PreferenceKeys.KEY_THEME_MODE, themeMode)
-        }
+        editor.putString(PreferenceKeys.KEY_THEME_MODE, PreferenceKeys.DEFAULT_THEME_MODE)
     }
 
     editor.apply()
     HostBlocker.get(context).reload()
     ClearGuardVpnService.reloadIfRunning(context)
-    return "Backup imported ($imported list entries). Appearance changes apply on next launch."
+    return "Backup imported ($imported list entries)."
 }
 
 private fun loadSources(prefs: android.content.SharedPreferences): List<String> {

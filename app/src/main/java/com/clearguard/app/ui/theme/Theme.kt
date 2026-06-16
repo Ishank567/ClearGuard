@@ -2,9 +2,7 @@ package com.clearguard.app.ui.theme
 
 import android.app.Activity
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -13,19 +11,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-/** User-selectable appearance, persisted under PreferenceKeys.KEY_THEME_MODE. */
-enum class ThemeMode(val prefValue: String) {
-    System("system"),
-    Light("light"),
-    Dark("dark");
-
-    companion object {
-        fun fromPref(value: String?): ThemeMode =
-            entries.firstOrNull { it.prefValue == value } ?: System
-    }
-}
-
-// Classy, minimal, modern palette for ShieldDNS.
+// Classy, minimal, modern palette for ShieldDNS — light theme only.
 // Deep trustworthy teal primary. Clean surfaces. Excellent contrast and breathing room.
 private val LightColorScheme = lightColorScheme(
     primary = Color(0xFF0F766E),           // Rich, calm teal
@@ -48,41 +34,9 @@ private val LightColorScheme = lightColorScheme(
     onError = Color.White
 )
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF14B8A6),
-    onPrimary = Color(0xFF003731),
-    primaryContainer = Color(0xFF134E4A),
-    onPrimaryContainer = Color(0xFFCCFBF1),
-    secondary = Color(0xFF60A5FA),
-    onSecondary = Color(0xFF001F3D),
-    secondaryContainer = Color(0xFF1E3A8A),
-    onSecondaryContainer = Color(0xFFDBEAFE),
-    background = Color(0xFF0A0F1C),
-    onBackground = Color(0xFFE2E8F0),
-    surface = Color(0xFF111827),
-    onSurface = Color(0xFFE2E8F0),
-    surfaceVariant = Color(0xFF1F2937),
-    onSurfaceVariant = Color(0xFF9CA3AF),
-    outline = Color(0xFF374151),
-    outlineVariant = Color(0xFF1F2937),
-    error = Color(0xFFF87171),
-    onError = Color(0xFF450A0A),
-    tertiary = Color(0xFFFBBF24),
-    onTertiary = Color(0xFF1C1917)
-)
-
 @Composable
-fun ShieldDNSTheme(
-    themeMode: ThemeMode = ThemeMode.System,
-    content: @Composable () -> Unit
-) {
-    val darkTheme = when (themeMode) {
-        ThemeMode.System -> isSystemInDarkTheme()
-        ThemeMode.Light -> false
-        ThemeMode.Dark -> true
-    }
-
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+fun ShieldDNSTheme(content: @Composable () -> Unit) {
+    val colorScheme = LightColorScheme
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -95,20 +49,18 @@ fun ShieldDNSTheme(
                 window.navigationBarColor = colorScheme.background.toArgb()
             }
             val controller = WindowCompat.getInsetsController(window, view)
-            controller.isAppearanceLightStatusBars = !darkTheme
-            controller.isAppearanceLightNavigationBars = !darkTheme
+            controller.isAppearanceLightStatusBars = true
+            controller.isAppearanceLightNavigationBars = true
         }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = AppTypography,   // kept clean Inter-based from Type.kt
+        typography = AppTypography,
         content = content
     )
 }
 
 // Back-compat alias so old call sites don't all explode at once.
-// New code should use ShieldDNSTheme.
 @Composable
-fun ClearGuardTheme(themeMode: ThemeMode = ThemeMode.System, content: @Composable () -> Unit) =
-    ShieldDNSTheme(themeMode = themeMode, content = content)
+fun ClearGuardTheme(content: @Composable () -> Unit) = ShieldDNSTheme(content = content)

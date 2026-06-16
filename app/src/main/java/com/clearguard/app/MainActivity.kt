@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.VpnService
+import android.app.UiModeManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -41,7 +42,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.isSystemInDarkTheme
+
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -80,7 +81,7 @@ import com.clearguard.app.ui.screens.PrivacyScreen
 import com.clearguard.app.ui.screens.OnboardingScreen
 import com.clearguard.app.ui.screens.SettingsScreen
 import com.clearguard.app.ui.theme.ClearGuardTheme
-import com.clearguard.app.ui.theme.ThemeMode
+
 import com.clearguard.app.vpn.ClearGuardVpnService
 import androidx.compose.material3.*
 import kotlinx.coroutines.isActive
@@ -98,6 +99,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PreferenceKeys.ensureDefaults(this)
+
+        // ShieldDNS uses a single light theme — ignore system dark mode.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getSystemService(UiModeManager::class.java)
+                ?.setApplicationNightMode(UiModeManager.MODE_NIGHT_NO)
+        }
 
         // Heavy startup work (blocklist parse, WorkManager DB init on first launch, asset/model
         // loads, RASP /proc probes) must NOT run on the main thread: doing it synchronously before
@@ -142,38 +149,15 @@ class MainActivity : ComponentActivity() {
         }?.takeIf { it.isNotBlank() }
 
         setContent {
-            var themeMode by remember {
-                mutableStateOf(
-                    ThemeMode.fromPref(
-                        PreferenceKeys.prefs(this).getString(
-                            PreferenceKeys.KEY_THEME_MODE,
-                            PreferenceKeys.DEFAULT_THEME_MODE
-                        )
-                    )
-                )
-            }
-            ClearGuardTheme(themeMode = themeMode) {
-                ClearGuardApp(
-                    themeMode = themeMode,
-                    sharedScamText = sharedScamText,
-                    onThemeModeChange = { mode ->
-                        PreferenceKeys.prefs(this).edit()
-                            .putString(PreferenceKeys.KEY_THEME_MODE, mode.prefValue)
-                            .apply()
-                        themeMode = mode
-                    }
-                )
+            ClearGuardTheme {
+                ClearGuardApp(sharedScamText = sharedScamText)
             }
         }
     }
 }
 
 @Composable
-fun ClearGuardApp(
-    themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit,
-    sharedScamText: String? = null
-) {
+fun ClearGuardApp(sharedScamText: String? = null) {
     val context = LocalContext.current
 
     var showOnboarding by remember {
@@ -422,9 +406,7 @@ fun ClearGuardApp(
                             .putBoolean(PreferenceKeys.KEY_DOH_ENABLED, enabled)
                             .apply()
                         dohEnabledState.value = enabled
-                    },
-                    themeMode = themeMode,
-                    onThemeModeChange = onThemeModeChange
+                    }
                 )
             }
         }
