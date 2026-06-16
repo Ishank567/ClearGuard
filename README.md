@@ -171,6 +171,11 @@ After pushing to GitHub, download the APK from:
 https://github.com/<owner>/<repo>/releases/tag/latest
 ```
 
+## Google Play Deployment
+
+For detailed instructions on how to build, sign, and upload ShieldDNS to the Google Play Store (both manually and using GitHub Actions automated workflows), see the [Google Play Store Deployment Guide](file:///c:/Users/ishan/Music/adblocker/docs/GOOGLE-PLAY-DEPLOYMENT.md).
+
+
 ## Main Files
 
 - `app/src/main/java/com/clearguard/app/vpn/ClearGuardVpnService.java`: DNS VPN service with a concurrent query pool.

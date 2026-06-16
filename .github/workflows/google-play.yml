@@ -1,0 +1,78 @@
+name: Google Play Upload
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Google Play track (internal, alpha, beta, production)'
+        required: true
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+      status:
+        description: 'Release status (completed, draft, halted, inProgress)'
+        required: true
+        default: 'completed'
+        type: choice
+        options:
+          - completed
+          - draft
+          - halted
+          - inProgress
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-to-play-store:
+    name: Build & Upload Release Bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: 8.14.5
+
+      - name: Build Release App Bundle (AAB)
+        run: gradle :app:bundleRelease --no-daemon
+
+      - name: Sign App Bundle
+        id: sign_app
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: app/build/outputs/bundle/release
+          signingKeyBase64: ${{ secrets.PLAY_STORE_KEY_STORE_BASE64 }}
+          alias: ${{ secrets.PLAY_STORE_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.PLAY_STORE_KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.PLAY_STORE_KEY_PASSWORD }}
+
+      - name: Upload to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonRaw: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+          packageName: com.clearguard.app
+          releaseFiles: ${{ steps.sign_app.outputs.signedReleaseFile }}
+          track: ${{ github.event.inputs.track || 'internal' }}
+          status: ${{ github.event.inputs.status || 'completed' }}
