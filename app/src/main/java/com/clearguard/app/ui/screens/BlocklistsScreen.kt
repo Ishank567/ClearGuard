@@ -127,10 +127,16 @@ fun BlocklistsScreen() {
     var conflicts by remember { mutableStateOf(emptyList<Conflict>()) }
     var lastConflictCheck by remember { mutableStateOf(0L) }
 
-    // Auto-detect conflicts on load / when user rules change (convenient for the detector feature)
+    // Auto-detect conflicts on load / when user rules change (convenient for the detector feature).
+    // detectConflicts() parses the whole downloaded hosts file (can be tens of MB), so it MUST run
+    // off the main thread — a LaunchedEffect body runs on the main dispatcher, so wrap it in IO or
+    // it freezes the UI on screen open.
     LaunchedEffect(customBlocks.size, securityBlocks.size, allowList.size) {
         if (customBlocks.isNotEmpty() || securityBlocks.isNotEmpty() || allowList.isNotEmpty()) {
-            conflicts = detectConflicts(context, customBlocks, securityBlocks, allowList)
+            val found = withContext(Dispatchers.IO) {
+                detectConflicts(context, customBlocks, securityBlocks, allowList)
+            }
+            conflicts = found
             lastConflictCheck = System.currentTimeMillis()
         }
     }
@@ -481,14 +487,15 @@ fun BlocklistsScreen() {
 
                         PrimaryButton(
                             onClick = {
-                                val newConflicts = detectConflicts(
-                                    context,
-                                    customBlocks,
-                                    securityBlocks,
-                                    allowList
-                                )
-                                conflicts = newConflicts
-                                lastConflictCheck = System.currentTimeMillis()
+                                // Heavy file parse — keep it off the main thread so the button tap
+                                // doesn't freeze the UI.
+                                scope.launch {
+                                    val newConflicts = withContext(Dispatchers.IO) {
+                                        detectConflicts(context, customBlocks, securityBlocks, allowList)
+                                    }
+                                    conflicts = newConflicts
+                                    lastConflictCheck = System.currentTimeMillis()
+                                }
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -523,8 +530,12 @@ fun BlocklistsScreen() {
                                                                 applyRulesChanged()
                                                             }
                                                         }
-                                                        // Re-run detection after resolve
-                                                        conflicts = detectConflicts(context, customBlocks, securityBlocks, allowList)
+                                                        // Re-run detection after resolve (off-thread).
+                                                        scope.launch {
+                                                            conflicts = withContext(Dispatchers.IO) {
+                                                                detectConflicts(context, customBlocks, securityBlocks, allowList)
+                                                            }
+                                                        }
                                                     },
                                                     modifier = Modifier.weight(1f)
                                                 ) {

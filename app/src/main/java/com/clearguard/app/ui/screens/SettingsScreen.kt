@@ -447,7 +447,10 @@ fun SettingsScreen(
         }
 
         // --- SECTION 2: AI scam heuristics & regional packs ---
-        var scamExpanded by remember { mutableStateOf(true) }
+        // Default collapsed: this section is large, and composing it (plus Section 3) eagerly made
+        // the whole ~1400-line Settings screen build in one frame on open, which froze the UI.
+        // It now composes only when the user expands it.
+        var scamExpanded by remember { mutableStateOf(false) }
         SectionHeader(
             icon = Icons.Default.GppBad,
             title = "AI Scam & Impersonation Shield",
@@ -898,7 +901,8 @@ fun SettingsScreen(
         }} // close Column + AnimatedVisibility for Scam section
 
         // --- SECTION 3: DNS settings, Encryption (DoH) & Diagnostics ---
-        var dnsExpanded by remember { mutableStateOf(true) }
+        // Default collapsed (see Section 2) so it composes lazily on expand, not on screen open.
+        var dnsExpanded by remember { mutableStateOf(false) }
         SectionHeader(
             icon = Icons.Default.Dns,
             title = "Secure DNS & Diagnostic Tools",

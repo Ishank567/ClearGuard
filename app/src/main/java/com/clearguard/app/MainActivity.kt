@@ -97,6 +97,20 @@ enum class AppScreen(val title: String, val icon: ImageVector) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Debug-only main-thread watchdog. If any UI freeze is caused by disk/network work on the
+        // main thread (a stray reload(), file read, or first SharedPreferences load), StrictMode
+        // logs it to logcat (tag "StrictMode") with a stack trace — turning an intermittent freeze
+        // into concrete evidence. penaltyLog() only logs; it never crashes. No effect in release.
+        if ((applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            android.os.StrictMode.setThreadPolicy(
+                android.os.StrictMode.ThreadPolicy.Builder()
+                    .detectAll()
+                    .penaltyLog()
+                    .build()
+            )
+        }
+
         PreferenceKeys.ensureDefaults(this)
 
         // ShieldDNS uses a single light theme — ignore system dark mode.
