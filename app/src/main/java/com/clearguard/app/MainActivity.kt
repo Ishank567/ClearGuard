@@ -75,7 +75,7 @@ import com.clearguard.app.blocking.BlocklistUpdateWorker
 import com.clearguard.app.blocking.HostBlocker
 import com.clearguard.app.ui.screens.ActivityScreen
 import com.clearguard.app.ui.screens.BlocklistsScreen
-import com.clearguard.app.ui.screens.BrowserScreen
+
 import com.clearguard.app.ui.screens.DashboardScreen
 import com.clearguard.app.ui.screens.PrivacyScreen
 import com.clearguard.app.ui.screens.OnboardingScreen
@@ -90,7 +90,6 @@ enum class AppScreen(val title: String, val icon: ImageVector) {
     Dashboard("Home", Icons.Default.Shield),
     Activity("Activity", Icons.Default.History),
     Privacy("Privacy", Icons.Default.VerifiedUser),
-    Browser("Browser", Icons.Default.Language),
     Blocklists("Lists", Icons.AutoMirrored.Filled.List),
     Settings("Settings", Icons.Default.Settings)
 }
@@ -380,7 +379,6 @@ fun ClearGuardApp(sharedScamText: String? = null) {
                     initialScanText = sharedScamText
                 )
                 AppScreen.Activity -> ActivityScreen(isProtected = isProtected)
-                AppScreen.Browser -> BrowserScreen()
                 AppScreen.Blocklists -> BlocklistsScreen()
                 AppScreen.Settings -> SettingsScreen(
                     isProtected = isProtected,

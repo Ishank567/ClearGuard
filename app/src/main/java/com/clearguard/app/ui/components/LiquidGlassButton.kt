@@ -1,8 +1,5 @@
 package com.clearguard.app.ui.components
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,7 +16,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -39,19 +35,19 @@ fun LiquidGlassButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "primaryBtnScale"
-    )
     Button(
         onClick = onClick,
-        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+        modifier = modifier.press3D(pressed),
         enabled = enabled,
         shape = RoundedCornerShape(cornerRadius),
         colors = ButtonDefaults.buttonColors(
             containerColor = accent,
             contentColor = contentColor
+        ),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 8.dp,
+            pressedElevation = 2.dp,
+            hoveredElevation = 10.dp
         ),
         contentPadding = contentPadding,
         interactionSource = interaction,
@@ -97,17 +93,17 @@ fun PrimaryButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "primaryBtnScale2"
-    )
     Button(
         onClick = onClick,
-        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+        modifier = modifier.press3D(pressed),
         enabled = enabled,
         shape = RoundedCornerShape(cornerRadius),
         colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = contentColor),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 6.dp,
+            pressedElevation = 1.dp,
+            hoveredElevation = 8.dp
+        ),
         contentPadding = contentPadding,
         interactionSource = interaction,
         content = content

@@ -225,7 +225,7 @@ private fun buildFeatureTransparencyItems(context: Context): List<FeatureTranspa
             ),
             scope = "Alerts before risky UPI payments or suspicious pay links",
             dataUsed = "UPI VPA, payee name, amount, and surrounding message text; processed on device",
-            visibleIn = "Privacy > Scanner and Browser UPI payment alert",
+            visibleIn = "Privacy > Scanner UPI payment alert",
             lastAdded = "0.4.x"
         ),
         FeatureTransparencyItem(

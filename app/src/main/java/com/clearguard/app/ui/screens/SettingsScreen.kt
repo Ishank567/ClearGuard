@@ -323,43 +323,7 @@ fun SettingsScreen(
 
         FeatureTransparencyPanel(context = context)
 
-        // 4. Browser & Content Shields (grouped)
-        GlassCard {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text("Browser & Content Shields", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(Modifier.height(12.dp))
-
-                // Key toggles from old browser/privacy section
-                val browserShields = listOf(
-                    "Anti-Fingerprint" to PreferenceKeys.KEY_BROWSER_ANTI_FINGERPRINT,
-                    "Cookie Remover" to PreferenceKeys.KEY_BROWSER_COOKIE_REMOVER,
-                    "Dark Pattern Blocker" to PreferenceKeys.KEY_BROWSER_DARK_PATTERN_BLOCKER,
-                    "Phone Shield" to PreferenceKeys.KEY_BROWSER_FAKE_PHONE_WARNER
-                )
-
-                browserShields.forEach { (label, key) ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(label, fontWeight = FontWeight.Medium)
-                        ClearSwitch(
-                            checked = prefs.getBoolean(key, true),
-                            onCheckedChange = {
-                                prefs.edit().putBoolean(key, it).apply()
-                                // Note: some require reload or webview refresh in browser
-                            }
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-                Text("Advanced anti-adblock tools available in the in-app Browser", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-
-        // 5. App Firewall & Blocking
+        // 4. App Firewall & Blocking
         GlassCard {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("App Firewall & Blocking", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
@@ -385,7 +349,7 @@ fun SettingsScreen(
             }
         }
 
-        // 6. Advanced
+        // 5. Advanced
         GlassCard {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("Advanced", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)

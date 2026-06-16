@@ -69,21 +69,17 @@ fun GlassCardInteractive(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.985f else 1f,
-        animationSpec = tween(120),
-        label = "cardPressScale"
-    )
 
     Card(
         onClick = onClick,
-        modifier = modifier.scale(scale),
+        // Gentle 3D press: scales in, tilts back, and its shadow drops — a tactile, physical feel.
+        modifier = modifier.press3D(isPressed, pressedScale = 0.98f, tiltDegrees = 5f),
         shape = RoundedCornerShape(cornerRadius),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp, pressedElevation = 1.dp),
         interactionSource = interactionSource
     ) {
         Box(content = content)

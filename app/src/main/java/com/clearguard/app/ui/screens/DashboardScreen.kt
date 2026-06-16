@@ -65,8 +65,7 @@ fun DashboardScreen(
     val familyEnabled = currentMode == "kids"
     var trackersEnabled by remember {
         mutableStateOf(
-            prefs.getBoolean(PreferenceKeys.KEY_BROWSER_ANTI_FINGERPRINT, PreferenceKeys.DEFAULT_BROWSER_ANTI_FINGERPRINT) &&
-            prefs.getBoolean(PreferenceKeys.KEY_BROWSER_COOKIE_REMOVER, PreferenceKeys.DEFAULT_BROWSER_COOKIE_REMOVER)
+            prefs.getBoolean(PreferenceKeys.KEY_BYPASS_GUARD_ENABLED, PreferenceKeys.DEFAULT_BYPASS_GUARD_ENABLED)
         )
     }
     val gamingEnabled = currentMode == "battery"
@@ -95,9 +94,9 @@ fun DashboardScreen(
         ShieldItem("Trackers", Icons.Default.TrackChanges, trackersEnabled) { enabled ->
             trackersEnabled = enabled
             prefs.edit()
-                .putBoolean(PreferenceKeys.KEY_BROWSER_ANTI_FINGERPRINT, enabled)
-                .putBoolean(PreferenceKeys.KEY_BROWSER_COOKIE_REMOVER, enabled)
+                .putBoolean(PreferenceKeys.KEY_BYPASS_GUARD_ENABLED, enabled)
                 .apply()
+            com.clearguard.app.vpn.ClearGuardVpnService.reloadIfRunning(context)
         },
         ShieldItem("Battery Saver", Icons.Default.BatterySaver, gamingEnabled) { enabled ->
             val mode = if (enabled) "battery" else "default"
@@ -162,7 +161,7 @@ fun DashboardScreen(
 
             Text(
                 text = if (isProtected) {
-                    "$blockedToday threats & ads blocked today"
+                    "${animatedCount(blockedToday)} threats & ads blocked today"
                 } else {
                     "Your device is currently unprotected"
                 },
@@ -204,7 +203,7 @@ fun DashboardScreen(
                 StatItem(
                     modifier = Modifier.weight(1f),
                     label = "Blocked Today",
-                    value = blockedToday.toString(),
+                    value = animatedCount(blockedToday).toString(),
                     icon = Icons.Default.Block
                 )
                 StatItem(

@@ -10,5 +10,5 @@
     android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
     android:description="@string/ig_ad_skipper_description"
-    android:notificationTimeout="100"
+    android:notificationTimeout="300"
     android:packageNames="com.instagram.android" />
