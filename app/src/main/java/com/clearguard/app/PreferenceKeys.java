@@ -28,6 +28,12 @@ public final class PreferenceKeys {
      */
     public static final String KEY_DAILY_HISTORY_JSON = "daily_history_json";
     public static final String KEY_ALLOWLIST = "allowlist";
+    /**
+     * Local-only record of blocks the user flagged as false positives (one entry per report,
+     * "domain\treason\ttimestamp"). Never leaves the device; can later feed an opt-in,
+     * privacy-preserving community signal. Used by the Domain Inspector "Report false block".
+     */
+    public static final String KEY_REPORTED_FALSE_POSITIVES = "reported_false_positives";
     public static final String KEY_CACHE_TTL_SECONDS = "cache_ttl_seconds";
     public static final String KEY_CUSTOM_BLOCKS = "custom_blocks";
     public static final String KEY_SECURITY_BLOCKS = "security_blocks";
@@ -74,6 +80,18 @@ public final class PreferenceKeys {
     public static final String KEY_WIFI_PROTECTION_ENABLED = "wifi_protection_enabled";
     public static final String KEY_REGIONAL_PACK_INDIA = "regional_pack_india";
     public static final String KEY_DATA_SAVER_ENABLED = "data_saver_enabled";
+    /**
+     * Meta/Instagram tracker & ad-telemetry pack. Blocks Facebook Audience Network ad servers and
+     * Meta analytics/pixel hosts at DNS. Does NOT (and cannot) remove Instagram's first-party
+     * in-feed/Reels video ads — those share the same CDN domains as real content.
+     */
+    public static final String KEY_META_AD_PACK = "meta_ad_pack";
+    /**
+     * Optional native-app Instagram ad-skipper (AccessibilityService). Best-effort: scrolls past
+     * "Sponsored" feed/Reels ads inside the Instagram app. Requires the user to grant Accessibility
+     * access in system settings; this flag is the in-app on/off intent.
+     */
+    public static final String KEY_IG_AD_SKIPPER_ENABLED = "ig_ad_skipper_enabled";
     public static final String KEY_BROWSER_COOKIE_REMOVER = "browser_cookie_remover";
     public static final String KEY_BROWSER_ANTI_FINGERPRINT = "browser_anti_fingerprint";
     public static final String KEY_BROWSER_CLEANER_RULES = "browser_cleaner_rules";
@@ -164,6 +182,8 @@ public final class PreferenceKeys {
     public static final boolean DEFAULT_WIFI_PROTECTION_ENABLED = true;
     public static final boolean DEFAULT_REGIONAL_PACK_INDIA = false;
     public static final boolean DEFAULT_DATA_SAVER_ENABLED = false;
+    public static final boolean DEFAULT_META_AD_PACK = false;
+    public static final boolean DEFAULT_IG_AD_SKIPPER_ENABLED = false;
     public static final boolean DEFAULT_BROWSER_COOKIE_REMOVER = true;
     public static final boolean DEFAULT_BROWSER_ANTI_FINGERPRINT = true;
     public static final boolean DEFAULT_BROWSER_DARK_PATTERN_BLOCKER = true;
@@ -304,6 +324,14 @@ public final class PreferenceKeys {
         }
         if (!prefs.contains(KEY_REGIONAL_PACK_INDIA)) {
             editor.putBoolean(KEY_REGIONAL_PACK_INDIA, DEFAULT_REGIONAL_PACK_INDIA);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_META_AD_PACK)) {
+            editor.putBoolean(KEY_META_AD_PACK, DEFAULT_META_AD_PACK);
+            changed = true;
+        }
+        if (!prefs.contains(KEY_IG_AD_SKIPPER_ENABLED)) {
+            editor.putBoolean(KEY_IG_AD_SKIPPER_ENABLED, DEFAULT_IG_AD_SKIPPER_ENABLED);
             changed = true;
         }
         if (!prefs.contains(KEY_BROWSER_COOKIE_REMOVER)) {

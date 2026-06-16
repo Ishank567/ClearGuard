@@ -13,13 +13,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.clearguard.app.PreferenceKeys
 import com.clearguard.app.R
 import kotlinx.coroutines.launch
 
@@ -58,8 +56,7 @@ private val pages = listOf(
 )
 
 @Composable
-fun OnboardingScreen(onComplete: () -> Unit) {
-    val context = LocalContext.current
+fun OnboardingScreen(onComplete: (startProtection: Boolean) -> Unit) {
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val coroutineScope = rememberCoroutineScope()
 
@@ -198,16 +195,30 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                 }
             } else {
                 Button(
-                    onClick = {
-                        PreferenceKeys.prefs(context).edit()
-                            .putBoolean(PreferenceKeys.KEY_ONBOARDING_SEEN, true)
-                            .apply()
-                        onComplete()
-                    },
+                    onClick = { onComplete(true) },
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Get Started")
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Activate Protection")
                 }
+            }
+        }
+
+        // On the final page, let users who want to look around first skip activation.
+        if (pagerState.currentPage == pages.size - 1) {
+            TextButton(
+                onClick = { onComplete(false) },
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                Text(
+                    "Skip for now — I'll start it myself",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

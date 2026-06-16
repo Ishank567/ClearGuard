@@ -128,10 +128,10 @@ fun PrivacyScreen(
                         .height(38.dp)
                         .padding(horizontal = 2.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.green.copy(alpha = 0.18f))
+                        .background(ClearColors.green.copy(alpha = 0.18f))
                         .border(
                             width = 1.dp,
-                            color = MaterialTheme.colorScheme.green.copy(alpha = 0.35f),
+                            color = ClearColors.green.copy(alpha = 0.35f),
                             shape = RoundedCornerShape(12.dp)
                         )
                 )
@@ -154,7 +154,7 @@ fun PrivacyScreen(
                                 text = title,
                                 fontSize = 13.sp,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (selected) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.text
+                                color = if (selected) ClearColors.green else ClearColors.text
                             )
                         }
                     }
@@ -221,6 +221,10 @@ fun LiveMonitorScreen(
     var isProtected by remember { mutableStateOf(ClearGuardVpnService.isRunning()) }
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     var selectedQuery by remember { mutableStateOf<ClearGuardVpnService.BlockedQuery?>(null) }
+    // Currently-active "Allow once" reprieves (domain -> remaining millis), so they're visible and revocable.
+    var tempAllows by remember { mutableStateOf<List<Pair<String, Long>>>(emptyList()) }
+    // Locally-stored false-block reports the user filed (never uploaded); shown for review/resolution.
+    var reportedFPs by remember { mutableStateOf(fetchReportedFalsePositives(context)) }
     var upstreamDns by remember {
         mutableStateOf(
             prefs.getString(PreferenceKeys.KEY_UPSTREAM_DNS, PreferenceKeys.DEFAULT_UPSTREAM_DNS)
@@ -233,6 +237,7 @@ fun LiveMonitorScreen(
             queries = ClearGuardVpnService.recentBlocked()
             isProtected = ClearGuardVpnService.isRunning()
             nowMillis = System.currentTimeMillis()
+            tempAllows = fetchTempAllows(context)
             upstreamDns = prefs.getString(PreferenceKeys.KEY_UPSTREAM_DNS, PreferenceKeys.DEFAULT_UPSTREAM_DNS)
                 ?: PreferenceKeys.DEFAULT_UPSTREAM_DNS
             kotlinx.coroutines.delay(if (isProtected) 1200L else 2500L)
@@ -266,6 +271,63 @@ fun LiveMonitorScreen(
         }
     }
 
+    // "Allow once" — a one-hour reprieve via the in-memory overlay. Takes effect immediately (the
+    // resolver reads it live) with no allowlist change and no VPN reload, so it's the safe undo for
+    // a false positive without permanently weakening protection.
+    fun allowOnce(domain: String) {
+        if (domain.startsWith("phone:")) return
+        val normalized = com.clearguard.app.blocking.HostBlocker.normalizeDomain(domain) ?: domain
+        com.clearguard.app.blocking.HostBlocker.get(context).allowTemporarily(normalized, 60L * 60L * 1000L)
+        queries = ClearGuardVpnService.recentBlocked()
+        tempAllows = fetchTempAllows(context)
+    }
+
+    // Cancel an active reprieve early — protection on this domain resumes immediately (read live).
+    fun revokeAllowOnce(domain: String) {
+        com.clearguard.app.blocking.HostBlocker.get(context).clearTemporaryAllow(domain)
+        tempAllows = fetchTempAllows(context)
+    }
+
+    // "Report false block" — records the block locally (never uploaded) and grants a one-hour
+    // reprieve so the user isn't stuck while it's noted.
+    fun reportFalseBlock(query: ClearGuardVpnService.BlockedQuery) {
+        val normalized = com.clearguard.app.blocking.HostBlocker.normalizeDomain(query.domain) ?: query.domain
+        val entry = normalized + "\t" + query.reason + "\t" + System.currentTimeMillis()
+        PreferenceKeys.addToStringSet(context, PreferenceKeys.KEY_REPORTED_FALSE_POSITIVES, entry)
+        if (!query.domain.startsWith("phone:")) {
+            com.clearguard.app.blocking.HostBlocker.get(context).allowTemporarily(normalized, 60L * 60L * 1000L)
+        }
+        queries = ClearGuardVpnService.recentBlocked()
+        tempAllows = fetchTempAllows(context)
+        reportedFPs = fetchReportedFalsePositives(context)
+    }
+
+    // Resolve a reported false block by permanently allowlisting the domain, then clearing the
+    // report and any redundant short-term reprieve.
+    fun allowReportedDomain(item: ReportedFalseBlock) {
+        if (!item.domain.startsWith("phone:")) {
+            allow(item.domain)
+            com.clearguard.app.blocking.HostBlocker.get(context).clearTemporaryAllow(item.domain)
+        }
+        PreferenceKeys.removeFromStringSet(context, PreferenceKeys.KEY_REPORTED_FALSE_POSITIVES, item.raw)
+        reportedFPs = fetchReportedFalsePositives(context)
+        tempAllows = fetchTempAllows(context)
+    }
+
+    // Remove a single report without changing any block/allow rule.
+    fun dismissReport(item: ReportedFalseBlock) {
+        PreferenceKeys.removeFromStringSet(context, PreferenceKeys.KEY_REPORTED_FALSE_POSITIVES, item.raw)
+        reportedFPs = fetchReportedFalsePositives(context)
+    }
+
+    fun clearAllReports() {
+        reportedFPs.forEach {
+            PreferenceKeys.removeFromStringSet(context, PreferenceKeys.KEY_REPORTED_FALSE_POSITIVES, it.raw)
+        }
+        reportedFPs = fetchReportedFalsePositives(context)
+    }
+
+    val tempAllowKeys = remember(tempAllows) { tempAllows.mapTo(mutableSetOf()) { it.first } }
     val blockedCount = remember(queries) { queries.count { it.blocked } }
     val allowedCount = remember(queries) { queries.count { !it.blocked } }
     val threatCount = remember(queries) { queries.count { it.status == "threat" || it.status == "bypass" } }
@@ -286,6 +348,15 @@ fun LiveMonitorScreen(
                     blockedCount = blockedCount,
                     threatCount = threatCount
                 )
+            }
+
+            if (tempAllows.isNotEmpty()) {
+                item {
+                    TemporaryAllowCard(
+                        entries = tempAllows,
+                        onRevoke = { revokeAllowOnce(it) }
+                    )
+                }
             }
 
             item {
@@ -323,8 +394,21 @@ fun LiveMonitorScreen(
                     queries = queries,
                     nowMillis = nowMillis,
                     isProtected = isProtected,
+                    tempAllowKeys = tempAllowKeys,
                     onSelectQuery = { selectedQuery = it }
                 )
+            }
+
+            if (reportedFPs.isNotEmpty()) {
+                item {
+                    ReportedFalseBlocksCard(
+                        items = reportedFPs,
+                        nowMillis = nowMillis,
+                        onAllow = { allowReportedDomain(it) },
+                        onDismiss = { dismissReport(it) },
+                        onClearAll = { clearAllReports() }
+                    )
+                }
             }
         }
 
@@ -363,8 +447,16 @@ fun LiveMonitorScreen(
                         allow(query.domain)
                         selectedQuery = null
                     },
+                    onAllowOnce = {
+                        allowOnce(query.domain)
+                        selectedQuery = null
+                    },
                     onBlock = {
                         block(query.domain)
+                        selectedQuery = null
+                    },
+                    onReport = {
+                        reportFalseBlock(query)
                         selectedQuery = null
                     }
                 )
@@ -401,21 +493,21 @@ private fun ProConsoleHeader(
                         text = "Advanced Pro Console",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.text
+                        color = ClearColors.text
                     )
                     Text(
                         text = if (isProtected) "DNS tunnel online" else "DNS tunnel paused",
                         fontSize = 12.sp,
-                        color = if (isProtected) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.muted
+                        color = if (isProtected) ClearColors.green else ClearColors.muted
                     )
                 }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
-                        .background((if (isProtected) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.danger).copy(alpha = 0.14f))
+                        .background((if (isProtected) ClearColors.green else ClearColors.danger).copy(alpha = 0.14f))
                         .border(
                             width = 1.dp,
-                            color = (if (isProtected) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.danger).copy(alpha = 0.32f),
+                            color = (if (isProtected) ClearColors.green else ClearColors.danger).copy(alpha = 0.32f),
                             shape = RoundedCornerShape(999.dp)
                         )
                         .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -428,14 +520,14 @@ private fun ProConsoleHeader(
                             modifier = Modifier
                                 .size(7.dp)
                                 .clip(CircleShape)
-                                .background(if (isProtected) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.danger)
+                                .background(if (isProtected) ClearColors.green else ClearColors.danger)
                         )
                         Text(
                             text = if (isProtected) "LIVE" else "IDLE",
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            color = if (isProtected) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.danger
+                            color = if (isProtected) ClearColors.green else ClearColors.danger
                         )
                     }
                 }
@@ -447,9 +539,9 @@ private fun ProConsoleHeader(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ProMetricTile("QUERIES", queryCount.toString(), MaterialTheme.colorScheme.blue, Modifier.weight(1f))
-                ProMetricTile("BLOCKED", blockedCount.toString(), MaterialTheme.colorScheme.danger, Modifier.weight(1f))
-                ProMetricTile("THREATS", threatCount.toString(), MaterialTheme.colorScheme.warning, Modifier.weight(1f))
+                ProMetricTile("QUERIES", queryCount.toString(), ClearColors.blue, Modifier.weight(1f))
+                ProMetricTile("BLOCKED", blockedCount.toString(), ClearColors.danger, Modifier.weight(1f))
+                ProMetricTile("THREATS", threatCount.toString(), ClearColors.warning, Modifier.weight(1f))
             }
         }
     }
@@ -480,7 +572,7 @@ private fun ProMetricTile(
             text = label,
             fontSize = 9.sp,
             fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.muted,
+            color = ClearColors.muted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -521,10 +613,10 @@ private fun DnsMonitorCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Dns, contentDescription = null, tint = MaterialTheme.colorScheme.blue, modifier = Modifier.size(20.dp))
-                    Text("DNS Monitor", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.text)
+                    Icon(Icons.Default.Dns, contentDescription = null, tint = ClearColors.blue, modifier = Modifier.size(20.dp))
+                    Text("DNS Monitor", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
                 }
-                Text(routeLabel, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = if (isProtected) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.muted)
+                Text(routeLabel, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = if (isProtected) ClearColors.green else ClearColors.muted)
             }
 
             Spacer(Modifier.height(12.dp))
@@ -534,16 +626,16 @@ private fun DnsMonitorCard(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color.Black.copy(alpha = 0.24f))
-                    .border(1.dp, MaterialTheme.colorScheme.border.copy(alpha = 0.20f), RoundedCornerShape(14.dp))
+                    .border(1.dp, ClearColors.border.copy(alpha = 0.20f), RoundedCornerShape(14.dp))
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
-                DnsMonitorRow("LOCAL VPN", if (isProtected) "10.64.0.1 / fd00::1" else "offline", if (isProtected) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.muted)
-                DnsMonitorRow("UPSTREAM", if (dohEnabled) "DoH endpoint" else upstreamDns, if (dohEnabled) MaterialTheme.colorScheme.blue else MaterialTheme.colorScheme.text)
-                DnsMonitorRow("LATENCY", if (upstreamAverageLatencyMs > 0f) "${upstreamAverageLatencyMs.toInt()} ms avg" else "learning", MaterialTheme.colorScheme.warning)
-                DnsMonitorRow("CACHE", "$cacheRate% hit rate / $sessionCacheHits session hits", MaterialTheme.colorScheme.green)
-                DnsMonitorRow("SESSION", "$sessionAllowed allowed / $sessionBlocked blocked", if (sessionBlocked > 0) MaterialTheme.colorScheme.danger else MaterialTheme.colorScheme.blue)
-                DnsMonitorRow("DOH QUERIES", dohQueries.toString(), if (dohEnabled) MaterialTheme.colorScheme.blue else MaterialTheme.colorScheme.muted)
+                DnsMonitorRow("LOCAL VPN", if (isProtected) "10.64.0.1 / fd00::1" else "offline", if (isProtected) ClearColors.green else ClearColors.muted)
+                DnsMonitorRow("UPSTREAM", if (dohEnabled) "DoH endpoint" else upstreamDns, if (dohEnabled) ClearColors.blue else ClearColors.text)
+                DnsMonitorRow("LATENCY", if (upstreamAverageLatencyMs > 0f) "${upstreamAverageLatencyMs.toInt()} ms avg" else "learning", ClearColors.warning)
+                DnsMonitorRow("CACHE", "$cacheRate% hit rate / $sessionCacheHits session hits", ClearColors.green)
+                DnsMonitorRow("SESSION", "$sessionAllowed allowed / $sessionBlocked blocked", if (sessionBlocked > 0) ClearColors.danger else ClearColors.blue)
+                DnsMonitorRow("DOH QUERIES", dohQueries.toString(), if (dohEnabled) ClearColors.blue else ClearColors.muted)
             }
         }
     }
@@ -556,7 +648,7 @@ private fun DnsMonitorRow(label: String, value: String, color: Color) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.muted)
+        Text(label, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = ClearColors.muted)
         Text(
             value,
             fontSize = 11.sp,
@@ -594,10 +686,10 @@ private fun NetworkGraphCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.AccountTree, contentDescription = null, tint = MaterialTheme.colorScheme.green, modifier = Modifier.size(20.dp))
-                    Text("Network Graph", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.text)
+                    Icon(Icons.Default.AccountTree, contentDescription = null, tint = ClearColors.green, modifier = Modifier.size(20.dp))
+                    Text("Network Graph", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
                 }
-                Text("${graphQueries.size} edges", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.muted)
+                Text("${graphQueries.size} edges", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = ClearColors.muted)
             }
 
             Spacer(Modifier.height(10.dp))
@@ -608,7 +700,7 @@ private fun NetworkGraphCard(
                     .weight(1f)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.Black.copy(alpha = 0.24f))
-                    .border(1.dp, MaterialTheme.colorScheme.border.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                    .border(1.dp, ClearColors.border.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
             ) {
                 if (graphQueries.isEmpty()) {
                     EmptyProConsoleState(isProtected = isProtected, modifier = Modifier.align(Alignment.Center))
@@ -621,7 +713,7 @@ private fun NetworkGraphCard(
                         for (line in 0..5) {
                             val y = h * (line / 5f)
                             drawLine(
-                                color = MaterialTheme.colorScheme.border.copy(alpha = 0.10f),
+                                color = ClearColors.border.copy(alpha = 0.10f),
                                 start = Offset(0f, y),
                                 end = Offset(w, y),
                                 strokeWidth = 1f
@@ -630,7 +722,7 @@ private fun NetworkGraphCard(
                         for (line in 0..4) {
                             val x = w * (line / 4f)
                             drawLine(
-                                color = MaterialTheme.colorScheme.border.copy(alpha = 0.08f),
+                                color = ClearColors.border.copy(alpha = 0.08f),
                                 start = Offset(x, 0f),
                                 end = Offset(x, h),
                                 strokeWidth = 1f
@@ -639,14 +731,14 @@ private fun NetworkGraphCard(
 
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colors = listOf(MaterialTheme.colorScheme.green.copy(alpha = 0.35f), Color.Transparent),
+                                colors = listOf(ClearColors.green.copy(alpha = 0.35f), Color.Transparent),
                                 center = center,
                                 radius = 68.dp.toPx()
                             ),
                             center = center,
                             radius = 68.dp.toPx()
                         )
-                        drawCircle(color = MaterialTheme.colorScheme.green.copy(alpha = 0.90f), center = center, radius = 16.dp.toPx())
+                        drawCircle(color = ClearColors.green.copy(alpha = 0.90f), center = center, radius = 16.dp.toPx())
                         drawCircle(color = Color.White.copy(alpha = 0.90f), center = center, radius = 4.dp.toPx())
 
                         val appPositions = appNames.mapIndexed { index, appName ->
@@ -674,12 +766,12 @@ private fun NetworkGraphCard(
                         }
 
                         appPositions.values.forEach { pos ->
-                            drawCircle(color = MaterialTheme.colorScheme.blue.copy(alpha = 0.92f), center = pos, radius = 10.dp.toPx())
+                            drawCircle(color = ClearColors.blue.copy(alpha = 0.92f), center = pos, radius = 10.dp.toPx())
                             drawCircle(color = Color.White.copy(alpha = 0.85f), center = pos, radius = 3.dp.toPx())
                         }
                         domainPositions.forEach { (domain, pos) ->
                             val matching = graphQueries.firstOrNull { rootDomain(it.domain) == domain }
-                            val color = matching?.let { queryAccent(it) } ?: MaterialTheme.colorScheme.muted
+                            val color = matching?.let { queryAccent(it) } ?: ClearColors.muted
                             drawCircle(color = color.copy(alpha = 0.92f), center = pos, radius = 11.dp.toPx())
                             drawCircle(color = Color.White.copy(alpha = 0.85f), center = pos, radius = 3.dp.toPx())
                         }
@@ -725,6 +817,7 @@ private fun TerminalLogsCard(
     queries: List<ClearGuardVpnService.BlockedQuery>,
     nowMillis: Long,
     isProtected: Boolean,
+    tempAllowKeys: Set<String>,
     onSelectQuery: (ClearGuardVpnService.BlockedQuery) -> Unit
 ) {
     GlassCard(
@@ -740,10 +833,10 @@ private fun TerminalLogsCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Terminal, contentDescription = null, tint = MaterialTheme.colorScheme.green, modifier = Modifier.size(20.dp))
-                    Text("Terminal Logs", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.text)
+                    Icon(Icons.Default.Terminal, contentDescription = null, tint = ClearColors.green, modifier = Modifier.size(20.dp))
+                    Text("Terminal Logs", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
                 }
-                Text("memory only", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.muted)
+                Text("memory only", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = ClearColors.muted)
             }
 
             Spacer(Modifier.height(10.dp))
@@ -753,7 +846,7 @@ private fun TerminalLogsCard(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.Black.copy(alpha = 0.36f))
-                    .border(1.dp, MaterialTheme.colorScheme.green.copy(alpha = 0.16f), RoundedCornerShape(16.dp))
+                    .border(1.dp, ClearColors.green.copy(alpha = 0.16f), RoundedCornerShape(16.dp))
                     .padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -764,6 +857,7 @@ private fun TerminalLogsCard(
                         TerminalLogRow(
                             query = query,
                             nowMillis = nowMillis,
+                            temporarilyAllowed = query.blocked && isDomainTemporarilyAllowed(query.domain, tempAllowKeys),
                             onClick = { onSelectQuery(query) }
                         )
                     }
@@ -777,6 +871,7 @@ private fun TerminalLogsCard(
 private fun TerminalLogRow(
     query: ClearGuardVpnService.BlockedQuery,
     nowMillis: Long,
+    temporarilyAllowed: Boolean,
     onClick: () -> Unit
 ) {
     val accent = queryAccent(query)
@@ -795,7 +890,7 @@ private fun TerminalLogRow(
             text = formatTime(query.timeMillis),
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.muted,
+            color = ClearColors.muted,
             modifier = Modifier.width(56.dp)
         )
         Box(
@@ -819,20 +914,42 @@ private fun TerminalLogRow(
         }
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = query.domain,
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = query.domain,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ClearColors.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (temporarilyAllowed) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(ClearColors.green.copy(alpha = 0.16f))
+                            .border(1.dp, ClearColors.green.copy(alpha = 0.30f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "ALLOWED",
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = ClearColors.green,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
             Text(
                 text = "${relativeLogTime(nowMillis - query.timeMillis)} | ${cleanAppName(query)} | ${query.reason}",
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.muted,
+                color = ClearColors.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -865,12 +982,12 @@ private fun EmptyProConsoleState(isProtected: Boolean, modifier: Modifier = Modi
                         scaleY = pulseScale
                     }
                     .clip(CircleShape)
-                    .background((if (isProtected) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.muted).copy(alpha = 0.16f))
+                    .background((if (isProtected) ClearColors.green else ClearColors.muted).copy(alpha = 0.16f))
             )
             Icon(
                 imageVector = Icons.Default.Shield,
                 contentDescription = null,
-                tint = if (isProtected) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.muted,
+                tint = if (isProtected) ClearColors.green else ClearColors.muted,
                 modifier = Modifier.size(30.dp)
             )
         }
@@ -879,7 +996,7 @@ private fun EmptyProConsoleState(isProtected: Boolean, modifier: Modifier = Modi
             text = if (isProtected) "awaiting dns events" else "console idle",
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.muted,
+            color = ClearColors.muted,
             textAlign = TextAlign.Center
         )
     }
@@ -890,10 +1007,16 @@ private fun ProDomainInspector(
     query: ClearGuardVpnService.BlockedQuery,
     onDismiss: () -> Unit,
     onAllow: () -> Unit,
-    onBlock: () -> Unit
+    onAllowOnce: () -> Unit,
+    onBlock: () -> Unit,
+    onReport: () -> Unit
 ) {
     val accent = queryAccent(query)
     val category = domainCategory(query)
+    val explanation = remember(query.domain, query.reason, query.status, query.threatScore, query.blocked) {
+        com.clearguard.app.security.BlockExplainer.explain(query)
+    }
+    val isPhoneEvent = query.domain.startsWith("phone:")
     val route = when {
         query.blocked -> "Local sinkhole"
         query.reason.equals("Cache hit", ignoreCase = true) -> "Local cache"
@@ -926,12 +1049,12 @@ private fun ProDomainInspector(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Domain Inspector", fontSize = 13.sp, color = MaterialTheme.colorScheme.muted, fontWeight = FontWeight.SemiBold)
+                    Text("Domain Inspector", fontSize = 13.sp, color = ClearColors.muted, fontWeight = FontWeight.SemiBold)
                     Text(
                         text = query.domain,
                         fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.text,
+                        color = ClearColors.text,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -949,9 +1072,18 @@ private fun ProDomainInspector(
 
             Spacer(Modifier.height(14.dp))
 
+            BlockExplanationCard(explanation)
+
+            if (explanation.showHelpline) {
+                Spacer(Modifier.height(10.dp))
+                InspectorHelplineCard()
+            }
+
+            Spacer(Modifier.height(12.dp))
+
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 InspectorMetric("CATEGORY", category, accent, Modifier.weight(1f))
-                InspectorMetric("SCORE", query.threatScore.coerceAtLeast(if (query.blocked) 20 else 0).toString(), MaterialTheme.colorScheme.warning, Modifier.weight(0.72f))
+                InspectorMetric("SCORE", query.threatScore.coerceAtLeast(if (query.blocked) 20 else 0).toString(), ClearColors.warning, Modifier.weight(0.72f))
             }
 
             Spacer(Modifier.height(10.dp))
@@ -961,7 +1093,7 @@ private fun ProDomainInspector(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color.Black.copy(alpha = 0.28f))
-                    .border(1.dp, MaterialTheme.colorScheme.border.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
+                    .border(1.dp, ClearColors.border.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
@@ -974,13 +1106,13 @@ private fun ProDomainInspector(
 
             Spacer(Modifier.height(10.dp))
 
-            Text("DNS Records", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.text)
+            Text("DNS Records", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
             Spacer(Modifier.height(6.dp))
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.bg.copy(alpha = 0.50f))
+                    .background(ClearColors.bg.copy(alpha = 0.50f))
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
@@ -999,34 +1131,379 @@ private fun ProDomainInspector(
 
             Spacer(Modifier.height(16.dp))
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PrimaryButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
-                    accent = MaterialTheme.colorScheme.muted,
-                    contentColor = MaterialTheme.colorScheme.muted
+            when {
+                // Phone / call events aren't DNS domains, so allow/block don't apply.
+                isPhoneEvent -> {
+                    PrimaryButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth(),
+                        accent = ClearColors.muted,
+                        contentColor = Color.White
+                    ) {
+                        Text("Close", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    }
+                }
+                query.blocked -> {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SecondaryButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                            Text("Close", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ClearColors.muted)
+                        }
+                        PrimaryButton(
+                            onClick = onAllowOnce,
+                            modifier = Modifier.weight(1f),
+                            accent = ClearColors.green,
+                            contentColor = Color.White
+                        ) {
+                            Text("Allow 1 hour", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PrimaryButton(
+                            onClick = onAllow,
+                            modifier = Modifier.weight(1f),
+                            accent = ClearColors.blue,
+                            contentColor = Color.White
+                        ) {
+                            Text("Allow always", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                        SecondaryButton(onClick = onReport, modifier = Modifier.weight(1f)) {
+                            Text("Report false block", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ClearColors.warning)
+                        }
+                    }
+                }
+                else -> {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SecondaryButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                            Text("Close", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ClearColors.muted)
+                        }
+                        PrimaryButton(
+                            onClick = onBlock,
+                            modifier = Modifier.weight(1.45f),
+                            accent = ClearColors.danger,
+                            contentColor = Color.White
+                        ) {
+                            Text("Block Domain", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun fetchTempAllows(context: android.content.Context): List<Pair<String, Long>> =
+    com.clearguard.app.blocking.HostBlocker.get(context).temporaryAllowSnapshot()
+        .map { it.key to it.value }
+        .sortedByDescending { it.second }
+
+/**
+ * Whether a queried domain is covered by an active "Allow once" reprieve — subdomain-aware, mirroring
+ * HostBlocker's own walk-up so a reprieve on example.com badges ads.example.com too.
+ */
+private fun isDomainTemporarilyAllowed(domain: String, allowedKeys: Set<String>): Boolean {
+    if (allowedKeys.isEmpty() || domain.startsWith("phone:")) return false
+    var cursor = com.clearguard.app.blocking.HostBlocker.normalizeDomain(domain) ?: return false
+    while (true) {
+        if (allowedKeys.contains(cursor)) return true
+        val dot = cursor.indexOf('.')
+        if (dot < 0) return false
+        cursor = cursor.substring(dot + 1)
+    }
+}
+
+/** A false-block the user reported, stored locally as "domain\treason\ttimestamp". */
+private data class ReportedFalseBlock(
+    val raw: String,
+    val domain: String,
+    val reason: String,
+    val timestamp: Long
+)
+
+private fun fetchReportedFalsePositives(context: android.content.Context): List<ReportedFalseBlock> =
+    PreferenceKeys.stringSetSorted(context, PreferenceKeys.KEY_REPORTED_FALSE_POSITIVES)
+        .mapNotNull { raw ->
+            val parts = raw.split("\t")
+            val domain = parts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            ReportedFalseBlock(
+                raw = raw,
+                domain = domain,
+                reason = parts.getOrNull(1).orEmpty(),
+                timestamp = parts.getOrNull(2)?.toLongOrNull() ?: 0L
+            )
+        }
+        .sortedByDescending { it.timestamp }
+
+/** Day-aware "Xm/Xh/Xd ago" label for the reported-false-block list. */
+private fun relativeReportTime(deltaMillis: Long): String {
+    if (deltaMillis < 0) return "just now"
+    val seconds = deltaMillis / 1000
+    return when {
+        seconds < 60 -> "just now"
+        seconds < 3600 -> "${seconds / 60}m ago"
+        seconds < 86_400 -> "${seconds / 3600}h ago"
+        else -> "${seconds / 86_400}d ago"
+    }
+}
+
+/**
+ * Lists the false-block reports the user filed (stored on-device only). Each can be resolved with
+ * "Allow always" (promote to the allowlist) or dismissed. Without this the reports were write-only.
+ * Only shown when at least one report exists.
+ */
+@Composable
+private fun ReportedFalseBlocksCard(
+    items: List<ReportedFalseBlock>,
+    nowMillis: Long,
+    onAllow: (ReportedFalseBlock) -> Unit,
+    onDismiss: (ReportedFalseBlock) -> Unit,
+    onClearAll: () -> Unit
+) {
+    val accent = ClearColors.warning
+    GlassCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Flag, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Reported false blocks",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ClearColors.text
+                    )
+                    Text(
+                        "Stored on this device only — never uploaded.",
+                        fontSize = 11.sp,
+                        color = ClearColors.muted,
+                        lineHeight = 15.sp
+                    )
+                }
+                if (items.size > 1) {
+                    SecondaryButton(onClick = onClearAll) {
+                        Text("Clear all", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = ClearColors.muted)
+                    }
+                }
+            }
+            items.forEach { item ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        item.domain,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ClearColors.text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    val meta = buildString {
+                        if (item.reason.isNotBlank()) append(item.reason)
+                        if (item.timestamp > 0L) {
+                            if (isNotEmpty()) append(" · ")
+                            append(relativeReportTime(nowMillis - item.timestamp))
+                        }
+                    }
+                    if (meta.isNotBlank()) {
+                        Text(
+                            meta,
+                            fontSize = 11.sp,
+                            color = ClearColors.muted,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            lineHeight = 15.sp
+                        )
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PrimaryButton(
+                            onClick = { onAllow(item) },
+                            modifier = Modifier.weight(1f),
+                            accent = ClearColors.green,
+                            contentColor = Color.White
+                        ) {
+                            Text("Allow always", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        }
+                        SecondaryButton(onClick = { onDismiss(item) }, modifier = Modifier.weight(1f)) {
+                            Text("Dismiss", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = ClearColors.muted)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "59m" / "45s" style remaining-time label for an active reprieve. */
+private fun formatReprieve(millis: Long): String {
+    val minutes = (millis / 60_000L).toInt()
+    if (minutes >= 1) return "${minutes}m"
+    val seconds = (millis / 1000L).toInt().coerceAtLeast(1)
+    return "${seconds}s"
+}
+
+/**
+ * Surfaces the "Allow once" reprieves that are currently in effect, with a live countdown and a
+ * one-tap Undo. Without this the temporary allows are invisible — you can't tell a domain is open
+ * or pull it back early. Only shown while at least one reprieve is active.
+ */
+@Composable
+private fun TemporaryAllowCard(
+    entries: List<Pair<String, Long>>,
+    onRevoke: (String) -> Unit
+) {
+    val accent = ClearColors.green
+    GlassCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Timer, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Temporarily allowed",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ClearColors.text
+                    )
+                    Text(
+                        if (entries.size == 1) "1 domain allowed for now — protection resumes automatically."
+                        else "${entries.size} domains allowed for now — protection resumes automatically.",
+                        fontSize = 11.sp,
+                        color = ClearColors.muted,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+            entries.forEach { (domain, remaining) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Close", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                }
-                if (query.blocked) {
-                    PrimaryButton(
-                        onClick = onAllow,
-                        modifier = Modifier.weight(1.45f),
-                        accent = MaterialTheme.colorScheme.green,
-                        contentColor = MaterialTheme.colorScheme.green
-                    ) {
-                        Text("Allow Domain", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            domain,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ClearColors.text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text("${formatReprieve(remaining)} left", fontSize = 11.sp, color = accent)
                     }
-                } else {
-                    PrimaryButton(
-                        onClick = onBlock,
-                        modifier = Modifier.weight(1.45f),
-                        accent = MaterialTheme.colorScheme.danger,
-                        contentColor = MaterialTheme.colorScheme.danger
-                    ) {
-                        Text("Block Domain", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(Modifier.width(8.dp))
+                    SecondaryButton(onClick = { onRevoke(domain) }) {
+                        Text("Undo", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = ClearColors.muted)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BlockExplanationCard(explanation: com.clearguard.app.security.BlockExplainer.Explanation) {
+    val accent = when (explanation.severity) {
+        com.clearguard.app.security.BlockExplainer.Severity.HIGH -> ClearColors.danger
+        com.clearguard.app.security.BlockExplainer.Severity.MEDIUM -> ClearColors.warning
+        com.clearguard.app.security.BlockExplainer.Severity.LOW -> ClearColors.blue
+        com.clearguard.app.security.BlockExplainer.Severity.INFO -> ClearColors.muted
+    }
+    val icon = when (explanation.severity) {
+        com.clearguard.app.security.BlockExplainer.Severity.HIGH -> Icons.Default.GppMaybe
+        com.clearguard.app.security.BlockExplainer.Severity.MEDIUM -> Icons.Default.Warning
+        com.clearguard.app.security.BlockExplainer.Severity.LOW -> Icons.Default.Shield
+        com.clearguard.app.security.BlockExplainer.Severity.INFO -> Icons.Default.Info
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(accent.copy(alpha = 0.10f))
+            .border(1.dp, accent.copy(alpha = 0.26f), RoundedCornerShape(14.dp))
+            .padding(13.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                explanation.headline,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = ClearColors.text
+            )
+        }
+        Text(explanation.detail, fontSize = 13.sp, color = ClearColors.text, lineHeight = 18.sp)
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(Icons.Default.TipsAndUpdates, contentDescription = null, tint = accent, modifier = Modifier.size(15.dp).padding(top = 1.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(explanation.advice, fontSize = 12.sp, color = ClearColors.muted, lineHeight = 16.sp)
+        }
+    }
+}
+
+@Composable
+private fun InspectorHelplineCard() {
+    val context = LocalContext.current
+    val accent = ClearColors.danger
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(accent.copy(alpha = 0.08f))
+            .border(1.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
+            .padding(13.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            "Report cyber fraud (official)",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = ClearColors.text
+        )
+        Text(
+            "If money was lost, report fast — the first hours matter most.",
+            fontSize = 12.sp,
+            color = ClearColors.muted,
+            lineHeight = 16.sp
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PrimaryButton(
+                onClick = {
+                    try {
+                        context.startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_DIAL, Uri.parse("tel:1930"))
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    } catch (_: Exception) {}
+                },
+                modifier = Modifier.weight(1f),
+                accent = accent,
+                contentColor = Color.White
+            ) {
+                Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Call 1930", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+            SecondaryButton(
+                onClick = {
+                    try {
+                        context.startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse("https://cybercrime.gov.in"))
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    } catch (_: Exception) {}
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("cybercrime.gov.in", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -1041,7 +1518,7 @@ private fun InspectorMetric(label: String, value: String, accent: Color, modifie
             .border(1.dp, accent.copy(alpha = 0.20f), RoundedCornerShape(14.dp))
             .padding(11.dp)
     ) {
-        Text(label, fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.muted)
+        Text(label, fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = ClearColors.muted)
         Text(
             value,
             fontSize = 13.sp,
@@ -1060,12 +1537,12 @@ private fun InspectorRecord(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.muted)
+        Text(label, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = ClearColors.muted)
         Text(
             value,
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.text,
+            color = ClearColors.text,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -1076,11 +1553,11 @@ private fun InspectorRecord(label: String, value: String) {
 
 private fun queryAccent(query: ClearGuardVpnService.BlockedQuery): Color {
     return when (query.status) {
-        "allowed" -> if (query.reason.equals("Cache hit", ignoreCase = true)) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.blue
-        "blocked" -> MaterialTheme.colorScheme.danger
-        "threat" -> MaterialTheme.colorScheme.danger
-        "bypass" -> MaterialTheme.colorScheme.warning
-        else -> MaterialTheme.colorScheme.muted
+        "allowed" -> if (query.reason.equals("Cache hit", ignoreCase = true)) ClearColors.green else ClearColors.blue
+        "blocked" -> ClearColors.danger
+        "threat" -> ClearColors.danger
+        "bypass" -> ClearColors.warning
+        else -> ClearColors.muted
     }
 }
 
@@ -1204,14 +1681,14 @@ fun AppAuditTab() {
             Button(
                 onClick = { selectedAuditTab = 0 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selectedAuditTab == 0) MaterialTheme.colorScheme.green.copy(alpha = 0.18f) else Color.Transparent,
-                    contentColor = if (selectedAuditTab == 0) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.text
+                    containerColor = if (selectedAuditTab == 0) ClearColors.green.copy(alpha = 0.18f) else Color.Transparent,
+                    contentColor = if (selectedAuditTab == 0) ClearColors.green else ClearColors.text
                 ),
                 modifier = Modifier
                     .weight(1f)
                     .border(
                         width = 1.dp,
-                        color = if (selectedAuditTab == 0) MaterialTheme.colorScheme.green.copy(alpha = 0.35f) else MaterialTheme.colorScheme.border.copy(alpha = 0.25f),
+                        color = if (selectedAuditTab == 0) ClearColors.green.copy(alpha = 0.35f) else ClearColors.border.copy(alpha = 0.25f),
                         shape = RoundedCornerShape(12.dp)
                     ),
                 shape = RoundedCornerShape(12.dp)
@@ -1224,14 +1701,14 @@ fun AppAuditTab() {
             Button(
                 onClick = { selectedAuditTab = 1 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selectedAuditTab == 1) MaterialTheme.colorScheme.green.copy(alpha = 0.18f) else Color.Transparent,
-                    contentColor = if (selectedAuditTab == 1) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.text
+                    containerColor = if (selectedAuditTab == 1) ClearColors.green.copy(alpha = 0.18f) else Color.Transparent,
+                    contentColor = if (selectedAuditTab == 1) ClearColors.green else ClearColors.text
                 ),
                 modifier = Modifier
                     .weight(1f)
                     .border(
                         width = 1.dp,
-                        color = if (selectedAuditTab == 1) MaterialTheme.colorScheme.green.copy(alpha = 0.35f) else MaterialTheme.colorScheme.border.copy(alpha = 0.25f),
+                        color = if (selectedAuditTab == 1) ClearColors.green.copy(alpha = 0.35f) else ClearColors.border.copy(alpha = 0.25f),
                         shape = RoundedCornerShape(12.dp)
                     ),
                 shape = RoundedCornerShape(12.dp)
@@ -1254,14 +1731,14 @@ fun AppAuditTab() {
                     ) {
                         Text(
                             text = "Auditing device apps...",
-                            color = MaterialTheme.colorScheme.text,
+                            color = ClearColors.text,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "Privacy scores and tracker counters will populate here as apps make network queries.",
-                            color = MaterialTheme.colorScheme.muted,
+                            color = ClearColors.muted,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center
                         )
@@ -1284,20 +1761,20 @@ fun AppAuditTab() {
                                     text = appStat.appName,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.text
+                                    color = ClearColors.text
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = "${appStat.blockedQueries} trackers blocked out of ${appStat.totalQueries} queries",
                                     fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.muted
+                                    color = ClearColors.muted
                                 )
                                 if (appStat.trackers.isNotEmpty()) {
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
                                         text = "Top trackers: " + appStat.trackers.keys.take(2).joinToString(", "),
                                         fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.danger,
+                                        color = ClearColors.danger,
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
@@ -1312,14 +1789,14 @@ fun AppAuditTab() {
                             ) {
                                 Canvas(modifier = Modifier.fillMaxSize()) {
                                     drawArc(
-                                        color = MaterialTheme.colorScheme.border.copy(alpha = 0.25f),
+                                        color = ClearColors.border.copy(alpha = 0.25f),
                                         startAngle = 0f,
                                         sweepAngle = 360f,
                                         useCenter = false,
                                         style = Stroke(width = 4.dp.toPx())
                                     )
                                     drawArc(
-                                        color = if (score >= 80) MaterialTheme.colorScheme.green else if (score >= 50) MaterialTheme.colorScheme.blue else MaterialTheme.colorScheme.danger,
+                                        color = if (score >= 80) ClearColors.green else if (score >= 50) ClearColors.blue else ClearColors.danger,
                                         startAngle = -90f,
                                         sweepAngle = (score.toFloat() / 100f) * 360f,
                                         useCenter = false,
@@ -1331,12 +1808,12 @@ fun AppAuditTab() {
                                         text = "$score",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.text
+                                        color = ClearColors.text
                                     )
                                     Text(
                                         text = "/100",
                                         fontSize = 8.sp,
-                                        color = MaterialTheme.colorScheme.muted
+                                        color = ClearColors.muted
                                     )
                                 }
                             }
@@ -1350,12 +1827,12 @@ fun AppAuditTab() {
                 text = "Invisible Tracker Map",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.text
+                color = ClearColors.text
             )
             Text(
                 text = "Dynamic on-device graph showing connections from your apps (inner nodes) to tracking companies (outer nodes).",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.muted
+                color = ClearColors.muted
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -1372,7 +1849,7 @@ fun AppAuditTab() {
                     ) {
                         Text(
                             text = "No trackers detected yet",
-                            color = MaterialTheme.colorScheme.muted,
+                            color = ClearColors.muted,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center
                         )
@@ -1404,7 +1881,7 @@ fun TrackerMapCanvas(connections: List<ClearGuardVpnService.TrackerConnection>) 
         // 1. Draw central "User" Node
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(MaterialTheme.colorScheme.green, MaterialTheme.colorScheme.green.copy(alpha = 0.15f)),
+                colors = listOf(ClearColors.green, ClearColors.green.copy(alpha = 0.15f)),
                 center = Offset(centerX, centerY),
                 radius = 28.dp.toPx()
             ),
@@ -1429,7 +1906,7 @@ fun TrackerMapCanvas(connections: List<ClearGuardVpnService.TrackerConnection>) 
 
             // Draw link from User -> App
             drawLine(
-                color = MaterialTheme.colorScheme.green.copy(alpha = 0.45f),
+                color = ClearColors.green.copy(alpha = 0.45f),
                 start = Offset(centerX, centerY),
                 end = appOffset,
                 strokeWidth = 2.dp.toPx(),
@@ -1438,7 +1915,7 @@ fun TrackerMapCanvas(connections: List<ClearGuardVpnService.TrackerConnection>) 
 
             // Draw App Node
             drawCircle(
-                color = MaterialTheme.colorScheme.blue,
+                color = ClearColors.blue,
                 radius = 12.dp.toPx(),
                 center = appOffset
             )
@@ -1461,7 +1938,7 @@ fun TrackerMapCanvas(connections: List<ClearGuardVpnService.TrackerConnection>) 
 
             // Draw Company Node
             drawCircle(
-                color = MaterialTheme.colorScheme.danger,
+                color = ClearColors.danger,
                 radius = 16.dp.toPx(),
                 center = compOffset
             )
@@ -1478,7 +1955,7 @@ fun TrackerMapCanvas(connections: List<ClearGuardVpnService.TrackerConnection>) 
             val compPos = companyPositions[conn.companyName]
             if (appPos != null && compPos != null) {
                 drawLine(
-                    color = MaterialTheme.colorScheme.danger.copy(alpha = 0.5f),
+                    color = ClearColors.danger.copy(alpha = 0.5f),
                     start = appPos,
                     end = compPos,
                     strokeWidth = 1.5.dp.toPx()
@@ -1578,12 +2055,12 @@ fun ScamScreenshotScanner(initialText: String? = null) {
 
         GlassCard {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text("Scam Screenshot Scanner", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.green)
+                Text("Scam Screenshot Scanner", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.green)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "Upload a screenshot of a suspicious ad, SMS, WhatsApp message or website. On-device OCR + Indian Scam Shield patterns will check for fake reward, KYC, payment, investment, job, customer support, or APK lures.",
                     fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.muted
+                    color = ClearColors.muted
                 )
                 Spacer(Modifier.height(16.dp))
 
@@ -1594,7 +2071,7 @@ fun ScamScreenshotScanner(initialText: String? = null) {
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    accent = MaterialTheme.colorScheme.green
+                    accent = ClearColors.green
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Image, contentDescription = null)
@@ -1605,7 +2082,7 @@ fun ScamScreenshotScanner(initialText: String? = null) {
 
                 if (selectedUri != null && bitmap != null) {
                     Spacer(Modifier.height(12.dp))
-                    Text("Selected image:", fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
+                    Text("Selected image:", fontSize = 12.sp, color = ClearColors.muted)
                     Spacer(Modifier.height(6.dp))
                     Image(
                         bitmap = bitmap!!.asImageBitmap(),
@@ -1614,7 +2091,7 @@ fun ScamScreenshotScanner(initialText: String? = null) {
                             .fillMaxWidth()
                             .heightIn(max = 220.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.border.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                            .border(1.dp, ClearColors.border.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
                         contentScale = ContentScale.Crop
                     )
                 }
@@ -1629,17 +2106,17 @@ fun ScamScreenshotScanner(initialText: String? = null) {
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.green)
+                    CircularProgressIndicator(color = ClearColors.green)
                     Spacer(Modifier.height(12.dp))
-                    Text("Running on-device OCR + scam analysis...", fontSize = 14.sp, color = MaterialTheme.colorScheme.text)
-                    Text("All processing stays on your device.", fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
+                    Text("Running on-device OCR + scam analysis...", fontSize = 14.sp, color = ClearColors.text)
+                    Text("All processing stays on your device.", fontSize = 12.sp, color = ClearColors.muted)
                 }
             }
         }
 
         if (errorMessage != null) {
             GlassCard {
-                Text(errorMessage!!, color = MaterialTheme.colorScheme.danger, modifier = Modifier.padding(16.dp))
+                Text(errorMessage!!, color = ClearColors.danger, modifier = Modifier.padding(16.dp))
             }
         }
 
@@ -1647,12 +2124,12 @@ fun ScamScreenshotScanner(initialText: String? = null) {
             GlassCard {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.danger)
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = ClearColors.danger)
                         Spacer(Modifier.width(8.dp))
                         Text("Detections — Indian Scam Shield", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     }
                     Spacer(Modifier.height(4.dp))
-                    Text("${detections.size} scam pattern(s) found in the image text", fontSize = 13.sp, color = MaterialTheme.colorScheme.muted)
+                    Text("${detections.size} scam pattern(s) found in the image text", fontSize = 13.sp, color = ClearColors.muted)
                     Spacer(Modifier.height(12.dp))
 
                     detections.forEach { det ->
@@ -1670,7 +2147,7 @@ fun ScamScreenshotScanner(initialText: String? = null) {
                 Text(
                     "No obvious scam patterns detected in the text. Still exercise caution — some sophisticated scams use images with little text.",
                     modifier = Modifier.padding(16.dp),
-                    color = MaterialTheme.colorScheme.text
+                    color = ClearColors.text
                 )
             }
         }
@@ -1683,7 +2160,7 @@ fun ScamScreenshotScanner(initialText: String? = null) {
                     Text(
                         extractedText.take(600) + if (extractedText.length > 600) "..." else "",
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.muted
+                        color = ClearColors.muted
                     )
                 }
             }
@@ -1710,11 +2187,11 @@ fun ScamScreenshotScanner(initialText: String? = null) {
                                 .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(domain, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.text)
-                            Text("Block", color = MaterialTheme.colorScheme.green, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(domain, modifier = Modifier.weight(1f), color = ClearColors.text)
+                            Text("Block", color = ClearColors.green, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
-                    Text("Tap any domain to add it to your block list.", fontSize = 11.sp, color = MaterialTheme.colorScheme.muted)
+                    Text("Tap any domain to add it to your block list.", fontSize = 11.sp, color = ClearColors.muted)
                 }
             }
         }
@@ -1725,7 +2202,7 @@ fun ScamScreenshotScanner(initialText: String? = null) {
                 Text("Tip", fontWeight = FontWeight.Medium)
                 Text(
                     "This scanner uses the same on-device Indian Scam Shield patterns as the DNS blocker. Best results on clear text screenshots (ads, SMS, WhatsApp forwards).",
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.muted
+                    fontSize = 12.sp, color = ClearColors.muted
                 )
             }
         }
@@ -1776,6 +2253,12 @@ fun SmsTextScamScanner(initialText: String? = null) {
                     suggestedDomains = domains
                     safePaymentCheck = paymentCheck
                     hasAnalyzed = true
+                } catch (e: Exception) {
+                    detections = emptyList()
+                    suggestedDomains = emptyList()
+                    safePaymentCheck = null
+                    hasAnalyzed = true
+                    android.util.Log.w("SmsTextScamScanner", "Scam text analysis failed: ${e.message}")
                 } finally {
                     isChecking = false
                 }
@@ -1790,12 +2273,12 @@ fun SmsTextScamScanner(initialText: String? = null) {
 
     GlassCard {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text("SMS / Text Scam Check", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.green)
+            Text("SMS / Text Scam Check", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.green)
             Spacer(Modifier.height(4.dp))
             Text(
                 "Paste a suspicious SMS, WhatsApp forward or link — or share it to ShieldDNS from any app. Checks scam UPI links, fake KYC/reward/job/loan lures and high-risk phone numbers, fully on-device.",
                 fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.muted
+                color = ClearColors.muted
             )
             Spacer(Modifier.height(14.dp))
 
@@ -1805,21 +2288,21 @@ fun SmsTextScamScanner(initialText: String? = null) {
                 modifier = Modifier.fillMaxWidth(),
                 minHeight = 100.dp,
                 placeholder = "Paste the message text here…",
-                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = MaterialTheme.colorScheme.text)
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ClearColors.text)
             )
             Spacer(Modifier.height(12.dp))
 
             PrimaryButton(
                 onClick = analyze,
                 modifier = Modifier.fillMaxWidth(),
-                accent = MaterialTheme.colorScheme.green
+                accent = ClearColors.green
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (isChecking) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.green
+                            color = ClearColors.green
                         )
                     } else {
                         Icon(Icons.Default.Search, contentDescription = null)
@@ -1854,12 +2337,12 @@ fun SmsTextScamScanner(initialText: String? = null) {
             GlassCard {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.danger)
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = ClearColors.danger)
                         Spacer(Modifier.width(8.dp))
                         Text("Scam signals in this message", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     }
                     Spacer(Modifier.height(4.dp))
-                    Text("${detections.size} pattern(s) matched — do not pay, click links, or share OTPs.", fontSize = 13.sp, color = MaterialTheme.colorScheme.muted)
+                    Text("${detections.size} pattern(s) matched — do not pay, click links, or share OTPs.", fontSize = 13.sp, color = ClearColors.muted)
                     Spacer(Modifier.height(12.dp))
 
                     detections.forEach { det ->
@@ -1873,11 +2356,11 @@ fun SmsTextScamScanner(initialText: String? = null) {
                     modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.green, modifier = Modifier.size(22.dp))
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ClearColors.green, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(10.dp))
                     Text(
                         "No obvious scam patterns in this text. Still verify the sender through official channels before paying or sharing details.",
-                        color = MaterialTheme.colorScheme.text,
+                        color = ClearColors.text,
                         fontSize = 13.sp
                     )
                 }
@@ -1903,14 +2386,14 @@ fun SmsTextScamScanner(initialText: String? = null) {
                                 .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(domain, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.text)
-                            Text("Block", color = MaterialTheme.colorScheme.green, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(domain, modifier = Modifier.weight(1f), color = ClearColors.text)
+                            Text("Block", color = ClearColors.green, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     Text(
                         blockedFeedback ?: "Tap any domain to add it to your block list.",
                         fontSize = 11.sp,
-                        color = if (blockedFeedback != null) MaterialTheme.colorScheme.green else MaterialTheme.colorScheme.muted
+                        color = if (blockedFeedback != null) ClearColors.green else ClearColors.muted
                     )
                 }
             }
@@ -1921,9 +2404,9 @@ fun SmsTextScamScanner(initialText: String? = null) {
 @Composable
 private fun SafePaymentAlertCard(check: OnDeviceRuleEngine.SafePaymentCheck) {
     val accent = when (check.riskLevel) {
-        "High" -> MaterialTheme.colorScheme.danger
-        "Medium" -> MaterialTheme.colorScheme.warning
-        else -> MaterialTheme.colorScheme.green
+        "High" -> ClearColors.danger
+        "Medium" -> ClearColors.warning
+        else -> ClearColors.green
     }
     GlassCard {
         Column(modifier = Modifier.padding(18.dp)) {
@@ -1945,7 +2428,7 @@ private fun SafePaymentAlertCard(check: OnDeviceRuleEngine.SafePaymentCheck) {
                     Text(
                         check.alertMessage,
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.text,
+                        color = ClearColors.text,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1969,18 +2452,18 @@ private fun SafePaymentAlertCard(check: OnDeviceRuleEngine.SafePaymentCheck) {
                 Text(
                     "Delay suggested: wait 30 seconds and verify through the official app or known contact.",
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.warning,
+                    color = ClearColors.warning,
                     fontWeight = FontWeight.Medium
                 )
             }
 
             Spacer(Modifier.height(10.dp))
-            Text("Why this alert?", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.text)
+            Text("Why this alert?", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
             check.reasons.forEach { reason ->
                 Text(
                     "• $reason",
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.muted,
+                    color = ClearColors.muted,
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
@@ -1997,11 +2480,11 @@ private fun PaymentDetailRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Top
     ) {
-        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.muted, modifier = Modifier.weight(0.36f))
+        Text(label, fontSize = 11.sp, color = ClearColors.muted, modifier = Modifier.weight(0.36f))
         Text(
             value,
             fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.text,
+            color = ClearColors.text,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(0.64f),
             maxLines = 3,
@@ -2014,9 +2497,9 @@ private fun PaymentDetailRow(label: String, value: String) {
 @Composable
 private fun ScamVerdictBanner(risk: Int, signalCount: Int) {
     val accent = when {
-        risk >= 70 -> MaterialTheme.colorScheme.danger
-        risk >= 40 -> MaterialTheme.colorScheme.warning
-        else -> MaterialTheme.colorScheme.green
+        risk >= 70 -> ClearColors.danger
+        risk >= 40 -> ClearColors.warning
+        else -> ClearColors.green
     }
     val title = when {
         risk >= 70 -> "High risk — likely a scam"
@@ -2072,7 +2555,7 @@ private fun ScamVerdictBanner(risk: Int, signalCount: Int) {
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(title, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = accent)
-                        Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.muted)
+                        Text(subtitle, fontSize = 12.sp, color = ClearColors.muted)
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Box(
@@ -2101,7 +2584,7 @@ private fun ScamVerdictBanner(risk: Int, signalCount: Int) {
                         .fillMaxWidth()
                         .height(10.dp)
                         .clip(RoundedCornerShape(5.dp))
-                        .background(MaterialTheme.colorScheme.muted.copy(alpha = 0.18f))
+                        .background(ClearColors.muted.copy(alpha = 0.18f))
                 ) {
                     Box(
                         modifier = Modifier
@@ -2120,10 +2603,10 @@ private fun ScamVerdictBanner(risk: Int, signalCount: Int) {
                     Text(
                         if (signalCount > 0) "$signalCount scam signal(s) detected" else "On-device risk score",
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.muted,
+                        color = ClearColors.muted,
                         modifier = Modifier.weight(1f)
                     )
-                    Text("$risk / 100", fontSize = 11.sp, color = MaterialTheme.colorScheme.muted)
+                    Text("$risk / 100", fontSize = 11.sp, color = ClearColors.muted)
                 }
             }
         }
@@ -2142,15 +2625,15 @@ private fun CyberHelplineCard() {
     GlassCard {
         Column(modifier = Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.SupportAgent, contentDescription = null, tint = MaterialTheme.colorScheme.blue)
+                Icon(Icons.Default.SupportAgent, contentDescription = null, tint = ClearColors.blue)
                 Spacer(Modifier.width(8.dp))
                 Text("If you've been targeted", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             }
             Spacer(Modifier.height(8.dp))
             info.advice.forEach { line ->
                 Row(modifier = Modifier.padding(vertical = 3.dp)) {
-                    Text("•  ", color = MaterialTheme.colorScheme.blue, fontSize = 13.sp)
-                    Text(line, fontSize = 13.sp, color = MaterialTheme.colorScheme.text)
+                    Text("•  ", color = ClearColors.blue, fontSize = 13.sp)
+                    Text(line, fontSize = 13.sp, color = ClearColors.text)
                 }
             }
             Spacer(Modifier.height(14.dp))
@@ -2167,7 +2650,7 @@ private fun CyberHelplineCard() {
                         }
                     },
                     modifier = Modifier.weight(1f),
-                    accent = MaterialTheme.colorScheme.danger
+                    accent = ClearColors.danger
                 ) {
                     Icon(Icons.Default.Call, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -2186,7 +2669,7 @@ private fun CyberHelplineCard() {
                         }
                     },
                     modifier = Modifier.weight(1f),
-                    accent = MaterialTheme.colorScheme.blue
+                    accent = ClearColors.blue
                 ) {
                     Icon(Icons.Default.Language, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -2197,7 +2680,7 @@ private fun CyberHelplineCard() {
             Text(
                 "1930 is India's official cyber-fraud helpline. Reporting fast can help freeze the money.",
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.muted
+                color = ClearColors.muted
             )
         }
     }
@@ -2207,9 +2690,9 @@ private fun CyberHelplineCard() {
 @Composable
 private fun ScamDetectionRow(det: ScamScreenshotAnalyzer.Detection) {
     val accent = when {
-        det.confidence >= 80 -> MaterialTheme.colorScheme.danger
-        det.confidence >= 60 -> MaterialTheme.colorScheme.warning
-        else -> MaterialTheme.colorScheme.blue
+        det.confidence >= 80 -> ClearColors.danger
+        det.confidence >= 60 -> ClearColors.warning
+        else -> ClearColors.blue
     }
     GlassCard(
         modifier = Modifier
@@ -2239,13 +2722,13 @@ private fun ScamDetectionRow(det: ScamScreenshotAnalyzer.Detection) {
                     }
                 }
                 Spacer(Modifier.height(2.dp))
-                Text(det.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.text)
+                Text(det.reason, fontSize = 12.sp, color = ClearColors.text)
                 if (det.snippet.isNotBlank()) {
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "\"${det.snippet.take(140)}${if (det.snippet.length > 140) "..." else ""}\"",
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.muted,
+                        color = ClearColors.muted,
                         fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                     )
                 }

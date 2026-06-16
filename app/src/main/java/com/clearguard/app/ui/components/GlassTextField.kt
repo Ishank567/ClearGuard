@@ -1,10 +1,12 @@
 package com.clearguard.app.ui.components
 
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -20,6 +22,7 @@ fun GlassTextField(
     placeholder: String = "",
     minHeight: Dp = 56.dp,
     singleLine: Boolean = false,
+    textStyle: TextStyle? = null,
     trailing: (@Composable () -> Unit)? = null
 ) {
     OutlinedTextField(
@@ -28,6 +31,7 @@ fun GlassTextField(
         modifier = modifier,
         placeholder = { if (placeholder.isNotEmpty()) Text(placeholder) },
         singleLine = singleLine,
+        textStyle = textStyle ?: LocalTextStyle.current,
         trailingIcon = trailing,
         colors = OutlinedTextFieldDefaults.colors()
     )

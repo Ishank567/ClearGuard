@@ -1,56 +1,85 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Clean modern shield for launcher icon - simplified for adaptive icon mask -->
+    <!-- Premium ShieldDNS mark: gradient shield, glossy bevel, glowing network hub.
+         Kept inside the adaptive-icon safe zone (centre ~66dp) so masks don't clip it. -->
 
-    <!-- Main shield -->
+    <!-- Soft accent glow disc behind the shield -->
+    <path android:pathData="M54,52 m-40,0 a40,40 0 1,0 80,0 a40,40 0 1,0 -80,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="48"
+                android:gradientRadius="42"
+                android:startColor="#5514B8A6"
+                android:endColor="#0014B8A6" />
+        </aapt:attr>
+    </path>
+
+    <!-- Shield body -->
+    <path android:pathData="M54,15 L83,26 C85,52 75,77 54,94 C33,77 23,52 25,26 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="15"
+                android:endX="54" android:endY="94"
+                android:startColor="#FF2DD4BF"
+                android:endColor="#FF0F766E" />
+        </aapt:attr>
+    </path>
+
+    <!-- Inner panel for depth -->
+    <path android:pathData="M54,22 L77,31 C79,52 70,73 54,86 C38,73 29,52 31,31 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="22"
+                android:endX="54" android:endY="86"
+                android:startColor="#FF115E59"
+                android:endColor="#FF0B4A47" />
+        </aapt:attr>
+    </path>
+
+    <!-- Glossy top highlight -->
+    <path android:pathData="M54,17 L81,27 C82,38 79,47 73,55 C66,46 60,42 54,42 C48,42 42,46 35,55 C29,47 26,38 27,27 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="17"
+                android:endX="54" android:endY="55"
+                android:startColor="#40FFFFFF"
+                android:endColor="#00FFFFFF" />
+        </aapt:attr>
+    </path>
+
+    <!-- Network connections -->
     <path
-        android:fillColor="#0F766E"
-        android:pathData="M54,10 L92,28 Q88,60 54,95 Q20,60 16,28 Z" />
-
-    <!-- Inner panel -->
-    <path
-        android:fillColor="#115E59"
-        android:pathData="M54,18 L86,33 Q83,57 54,82 Q25,57 22,33 Z" />
-
-    <!-- Accent rim -->
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#14B8A6"
-        android:strokeWidth="2"
-        android:pathData="M54,14 L89,30 Q86,58 54,90 Q22,58 19,30 Z" />
-
-    <!-- Central network hub (minimal) -->
-    <path
-        android:fillColor="#CCFBF1"
-        android:pathData="M54,48 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
-
-    <!-- Small nodes -->
-    <path android:fillColor="#CCFBF1" android:pathData="M54,30 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
-    <path android:fillColor="#CCFBF1" android:pathData="M38,58 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
-    <path android:fillColor="#CCFBF1" android:pathData="M70,58 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
-
-    <!-- Thin connections -->
-    <path
-        android:fillColor="@android:color/transparent"
         android:strokeColor="#CCFBF1"
-        android:strokeWidth="1.8"
+        android:strokeWidth="2.2"
         android:strokeLineCap="round"
-        android:pathData="M54,41 L54,33" />
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#CCFBF1"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:pathData="M54,55 L42,56" />
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#CCFBF1"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:pathData="M54,55 L66,56" />
+        android:pathData="M54,52 L54,38 M54,52 L40,60 M54,52 L68,60" />
+
+    <!-- Central hub -->
+    <path android:pathData="M54,52 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="52"
+                android:gradientRadius="9"
+                android:startColor="#FFFFFFFF"
+                android:endColor="#FFCCFBF1" />
+        </aapt:attr>
+    </path>
+
+    <!-- Outer nodes -->
+    <path android:fillColor="#CCFBF1" android:pathData="M54,38 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+    <path android:fillColor="#CCFBF1" android:pathData="M40,60 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+    <path android:fillColor="#CCFBF1" android:pathData="M68,60 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
 
 </vector>

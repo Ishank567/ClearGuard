@@ -80,7 +80,7 @@ fun StatisticsScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = AppDesign.screenHPadding, vertical = 12.dp)
+            .padding(horizontal = ClearDesign.screenHPadding, vertical = 12.dp)
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -204,7 +204,7 @@ fun StatisticsScreen(
                 Text("Protection Intelligence", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 Spacer(Modifier.height(12.dp))
                 InsightRow("Cache efficiency", percentLabel(cacheEfficiency))
-                MeterBar(progress = cacheEfficiency, color = MaterialTheme.colorScheme.blue)
+                MeterBar(progress = cacheEfficiency, color = ClearColors.blue)
                 Spacer(Modifier.height(12.dp))
                 InsightRow("DNS trips avoided", formatNumber(avoidedDnsTrips))
                 InsightRow("Upstream lookups", formatNumber(upstreamQueries))
@@ -238,7 +238,7 @@ fun StatisticsScreen(
                         ) {
                             Text(
                                 domain,
-                                color = MaterialTheme.colorScheme.text,
+                                color = ClearColors.text,
                                 fontSize = 13.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -247,19 +247,19 @@ fun StatisticsScreen(
                             Spacer(Modifier.width(10.dp))
                             Text(
                                 formatNumber(count),
-                                color = MaterialTheme.colorScheme.muted,
+                                color = ClearColors.muted,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
                         Spacer(Modifier.height(4.dp))
-                        MeterBar(progress = count.toFloat() / maxCount, color = MaterialTheme.colorScheme.green)
+                        MeterBar(progress = count.toFloat() / maxCount, color = ClearColors.green)
                         Spacer(Modifier.height(10.dp))
                     }
                     Text(
                         "Counted on-device only. Cleared when you clear app data.",
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.muted
+                        color = ClearColors.muted
                     )
                 }
             }
@@ -298,7 +298,7 @@ fun StatisticsScreen(
                 Spacer(Modifier.height(10.dp))
                 Text(
                     "ShieldDNS keeps aggregate DNS counts only. Recent blocked domains remain in memory and are cleared when protection stops.",
-                    color = MaterialTheme.colorScheme.muted,
+                    color = ClearColors.muted,
                     fontSize = 13.sp
                 )
             }
@@ -308,7 +308,7 @@ fun StatisticsScreen(
         Text(
             "Updated from on-device state",
             fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.muted,
+            color = ClearColors.muted,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
     }
@@ -351,7 +351,7 @@ private fun EfficiencySection(
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 style = androidx.compose.ui.text.TextStyle(
-                    brush = Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.text, MaterialTheme.colorScheme.green))
+                    brush = Brush.horizontalGradient(listOf(ClearColors.text, ClearColors.green))
                 )
             )
             Spacer(Modifier.height(8.dp))
@@ -361,7 +361,7 @@ private fun EfficiencySection(
             Text(
                 "Estimated from your real blocked-request count at ~25 KB per avoided ad or tracker payload.",
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.muted
+                color = ClearColors.muted
             )
         }
     }
@@ -373,10 +373,10 @@ private fun EfficiencySection(
             Text("Page Load Speed", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             Spacer(Modifier.height(12.dp))
             InsightRow("Without blocking (typical)", secondsLabel(TYPICAL_PAGE_LOAD_MS))
-            MeterBar(progress = 1f, color = MaterialTheme.colorScheme.blue)
+            MeterBar(progress = 1f, color = ClearColors.blue)
             Spacer(Modifier.height(10.dp))
             InsightRow("With blocking (estimated)", secondsLabel(estLoadAfterMs))
-            MeterBar(progress = estLoadAfterMs / TYPICAL_PAGE_LOAD_MS, color = MaterialTheme.colorScheme.green)
+            MeterBar(progress = estLoadAfterMs / TYPICAL_PAGE_LOAD_MS, color = ClearColors.green)
             Spacer(Modifier.height(12.dp))
             InsightRow("DNS answered from cache", "0 ms (" + formatNumber(cacheHits) + " hits)")
             InsightRow("DNS via upstream", latencyLabel(upstreamAverageLatencyMs))
@@ -384,7 +384,7 @@ private fun EfficiencySection(
             Text(
                 "The speed-up estimate scales with your measured block rate. Cached DNS timings are real on-device numbers.",
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.muted
+                color = ClearColors.muted
             )
         }
     }
@@ -401,7 +401,7 @@ private fun EfficiencySection(
             Text(
                 "Every blocked request and cache hit is one less radio transmission. For minimum drain, pick the Battery profile in Security Profiles: it skips DoH and extends the DNS cache.",
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.muted
+                color = ClearColors.muted
             )
         }
     }
@@ -429,8 +429,8 @@ private fun InsightRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, color = MaterialTheme.colorScheme.muted, fontSize = 13.sp)
-        Text(value, color = MaterialTheme.colorScheme.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, color = ClearColors.muted, fontSize = 13.sp)
+        Text(value, color = ClearColors.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -442,7 +442,7 @@ private fun MeterBar(progress: Float, color: Color) {
             .fillMaxWidth()
             .height(8.dp)
             .clip(RoundedCornerShape(4.dp))
-            .background(MaterialTheme.colorScheme.border.copy(alpha = 0.55f))
+            .background(ClearColors.border.copy(alpha = 0.55f))
     ) {
         Box(
             modifier = Modifier
@@ -480,19 +480,19 @@ private fun TrafficSplitCard(blockedTotal: Long, allowedTotal: Long) {
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box(modifier = Modifier.size(110.dp), contentAlignment = Alignment.Center) {
-                val track = MaterialTheme.colorScheme.border.copy(alpha = 0.45f)
+                val track = ClearColors.border.copy(alpha = 0.45f)
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val stroke = 14.dp.toPx()
                     val arc = Size(size.width - stroke, size.height - stroke)
                     val tl = Offset(stroke / 2f, stroke / 2f)
                     if (total > 0) {
                         drawArc(
-                            color = MaterialTheme.colorScheme.blue.copy(alpha = 0.85f),
+                            color = ClearColors.blue.copy(alpha = 0.85f),
                             startAngle = -90f, sweepAngle = 360f, useCenter = false,
                             topLeft = tl, size = arc, style = Stroke(width = stroke)
                         )
                         drawArc(
-                            color = MaterialTheme.colorScheme.green,
+                            color = ClearColors.green,
                             startAngle = -90f, sweepAngle = 360f * animatedRatio, useCenter = false,
                             topLeft = tl, size = arc, style = Stroke(width = stroke)
                         )
@@ -505,22 +505,22 @@ private fun TrafficSplitCard(blockedTotal: Long, allowedTotal: Long) {
                     }
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(rateLabel, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.text)
-                    Text("blocked", fontSize = 10.sp, color = MaterialTheme.colorScheme.muted)
+                    Text(rateLabel, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ClearColors.text)
+                    Text("blocked", fontSize = 10.sp, color = ClearColors.muted)
                 }
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text("Traffic Split", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 Spacer(Modifier.height(10.dp))
-                TrafficLegendRow(MaterialTheme.colorScheme.green, "Blocked", formatNumber(blockedTotal))
+                TrafficLegendRow(ClearColors.green, "Blocked", formatNumber(blockedTotal))
                 Spacer(Modifier.height(6.dp))
-                TrafficLegendRow(MaterialTheme.colorScheme.blue, "Allowed", formatNumber(allowedTotal))
+                TrafficLegendRow(ClearColors.blue, "Allowed", formatNumber(allowedTotal))
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (total > 0) "Across ${formatNumber(total)} DNS queries"
                     else "No DNS queries recorded yet",
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.muted
+                    color = ClearColors.muted
                 )
             }
         }
@@ -537,8 +537,8 @@ private fun TrafficLegendRow(color: Color, label: String, value: String) {
                 .background(color)
         )
         Spacer(Modifier.width(8.dp))
-        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.muted, modifier = Modifier.weight(1f))
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.text)
+        Text(label, fontSize = 13.sp, color = ClearColors.muted, modifier = Modifier.weight(1f))
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
     }
 }
 
@@ -551,15 +551,15 @@ private fun StatCard(
 ) {
     GlassCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(label, color = MaterialTheme.colorScheme.muted, fontSize = 12.sp)
+            Text(label, color = ClearColors.muted, fontSize = 12.sp)
             Text(
                 text = value,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 style = androidx.compose.ui.text.TextStyle(
                     brush = Brush.horizontalGradient(
-                        colors = if (accent) listOf(MaterialTheme.colorScheme.text, MaterialTheme.colorScheme.green)
-                                else listOf(MaterialTheme.colorScheme.text, MaterialTheme.colorScheme.blue)
+                        colors = if (accent) listOf(ClearColors.text, ClearColors.green)
+                                else listOf(ClearColors.text, ClearColors.blue)
                     )
                 )
             )
@@ -669,7 +669,7 @@ private fun RadialSecurityGauge(
         contentAlignment = Alignment.Center,
         modifier = modifier
     ) {
-        val inactiveColor = MaterialTheme.colorScheme.border.copy(alpha = 0.45f)
+        val inactiveColor = ClearColors.border.copy(alpha = 0.45f)
 
         Canvas(modifier = Modifier.fillMaxSize()) {
             val strokeWidth = 8.dp.toPx()
@@ -690,8 +690,8 @@ private fun RadialSecurityGauge(
             drawArc(
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        MaterialTheme.colorScheme.green.copy(alpha = 0.22f),
-                        MaterialTheme.colorScheme.blue.copy(alpha = 0.22f)
+                        ClearColors.green.copy(alpha = 0.22f),
+                        ClearColors.blue.copy(alpha = 0.22f)
                     )
                 ),
                 startAngle = -220f,
@@ -706,7 +706,7 @@ private fun RadialSecurityGauge(
             // Active glowing progress arc
             drawArc(
                 brush = Brush.linearGradient(
-                    colors = listOf(MaterialTheme.colorScheme.green, MaterialTheme.colorScheme.blue)
+                    colors = listOf(ClearColors.green, ClearColors.blue)
                 ),
                 startAngle = -220f,
                 sweepAngle = (animatedScore / 100f) * 260f,
@@ -723,12 +723,12 @@ private fun RadialSecurityGauge(
                 text = "$score",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.text
+                color = ClearColors.text
             )
             Text(
                 text = "Score",
                 fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.muted,
+                color = ClearColors.muted,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -756,8 +756,8 @@ private fun QueryHistoryChart(modifier: Modifier = Modifier) {
             ) {
                 Text("Query Volume — sample trend", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LegendItem("Allowed", MaterialTheme.colorScheme.blue)
-                    LegendItem("Blocked", MaterialTheme.colorScheme.green)
+                    LegendItem("Allowed", ClearColors.blue)
+                    LegendItem("Blocked", ClearColors.green)
                 }
             }
 
@@ -777,7 +777,7 @@ private fun QueryHistoryChart(modifier: Modifier = Modifier) {
 
                 // Draw background grid lines (horizontal grid)
                 val gridLines = 4
-                val gridColor = MaterialTheme.colorScheme.border.copy(alpha = 0.25f)
+                val gridColor = ClearColors.border.copy(alpha = 0.25f)
                 for (i in 0..gridLines) {
                     val y = h * (i.toFloat() / gridLines)
                     drawLine(
@@ -849,19 +849,19 @@ private fun QueryHistoryChart(modifier: Modifier = Modifier) {
                     drawPath(
                         path = allowedFillPath,
                         brush = Brush.verticalGradient(
-                            listOf(MaterialTheme.colorScheme.blue.copy(alpha = 0.16f), Color.Transparent)
+                            listOf(ClearColors.blue.copy(alpha = 0.16f), Color.Transparent)
                         )
                     )
                     // Allowed Glow Shadow
                     drawPath(
                         path = allowedPath,
-                        color = MaterialTheme.colorScheme.blue.copy(alpha = 0.24f),
+                        color = ClearColors.blue.copy(alpha = 0.24f),
                         style = Stroke(width = 7.dp.toPx(), cap = StrokeCap.Round)
                     )
                     // Draw Allowed Line
                     drawPath(
                         path = allowedPath,
-                        color = MaterialTheme.colorScheme.blue,
+                        color = ClearColors.blue,
                         style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
                     )
 
@@ -869,19 +869,19 @@ private fun QueryHistoryChart(modifier: Modifier = Modifier) {
                     drawPath(
                         path = blockedFillPath,
                         brush = Brush.verticalGradient(
-                            listOf(MaterialTheme.colorScheme.green.copy(alpha = 0.20f), Color.Transparent)
+                            listOf(ClearColors.green.copy(alpha = 0.20f), Color.Transparent)
                         )
                     )
                     // Blocked Glow Shadow
                     drawPath(
                         path = blockedPath,
-                        color = MaterialTheme.colorScheme.green.copy(alpha = 0.28f),
+                        color = ClearColors.green.copy(alpha = 0.28f),
                         style = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round)
                     )
                     // Draw Blocked Line
                     drawPath(
                         path = blockedPath,
-                        color = MaterialTheme.colorScheme.green,
+                        color = ClearColors.green,
                         style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
                     )
 
@@ -889,10 +889,10 @@ private fun QueryHistoryChart(modifier: Modifier = Modifier) {
                     for (i in 0 until pointsCount) {
                         val ap = getCoords(i, allowedData[i])
                         val bp = getCoords(i, blockedData[i])
-                        drawCircle(color = MaterialTheme.colorScheme.blue, radius = 4.dp.toPx(), center = ap)
+                        drawCircle(color = ClearColors.blue, radius = 4.dp.toPx(), center = ap)
                         drawCircle(color = Color.White, radius = 2.dp.toPx(), center = ap)
 
-                        drawCircle(color = MaterialTheme.colorScheme.green, radius = 4.dp.toPx(), center = bp)
+                        drawCircle(color = ClearColors.green, radius = 4.dp.toPx(), center = bp)
                         drawCircle(color = Color.White, radius = 2.dp.toPx(), center = bp)
                     }
                 }
@@ -906,7 +906,7 @@ private fun QueryHistoryChart(modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 labels.forEach { label ->
-                    Text(text = label, fontSize = 11.sp, color = MaterialTheme.colorScheme.muted)
+                    Text(text = label, fontSize = 11.sp, color = ClearColors.muted)
                 }
             }
 
@@ -914,7 +914,7 @@ private fun QueryHistoryChart(modifier: Modifier = Modifier) {
             Text(
                 "Illustrative 7-day shape. ShieldDNS keeps only aggregate on-device counts, not daily history.",
                 fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.muted
+                color = ClearColors.muted
             )
         }
     }
@@ -932,6 +932,6 @@ private fun LegendItem(label: String, color: Color) {
                 .clip(CircleShape)
                 .background(color)
         )
-        Text(text = label, fontSize = 11.sp, color = MaterialTheme.colorScheme.muted, fontWeight = FontWeight.Medium)
+        Text(text = label, fontSize = 11.sp, color = ClearColors.muted, fontWeight = FontWeight.Medium)
     }
 }

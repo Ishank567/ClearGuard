@@ -1,0 +1,32 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Deep navy → teal diagonal base -->
+    <path android:pathData="M0,0 H108 V108 H0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0" android:startY="0"
+                android:endX="108" android:endY="108"
+                android:startColor="#FF0B1220"
+                android:endColor="#FF0F3B38" />
+        </aapt:attr>
+    </path>
+
+    <!-- Soft teal glow behind the shield -->
+    <path android:pathData="M0,0 H108 V108 H0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54" android:centerY="46"
+                android:gradientRadius="66"
+                android:startColor="#4014B8A6"
+                android:endColor="#00000000" />
+        </aapt:attr>
+    </path>
+
+</vector>

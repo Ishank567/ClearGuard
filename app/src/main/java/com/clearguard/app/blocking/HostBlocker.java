@@ -29,6 +29,14 @@ public final class HostBlocker {
     private volatile Set<String> allowedHosts = Collections.emptySet();
     private volatile Set<String> securityHosts = Collections.emptySet();
 
+    // Time-bounded "allow once" overlay (domain -> expiry epoch millis). Lets the user reverse a
+    // false-positive block for a short window without permanently allowlisting the domain. It is
+    // consulted live on every query, so it takes effect with no VPN reload, and deliberately kept
+    // separate from the immutable swap-on-reload sets above so the lock-light reader path and the
+    // reload() rebuild are untouched (a temporary allow survives a reload).
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> temporaryAllow =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     private HostBlocker(Context context) {
         this.context = context.getApplicationContext();
     }
@@ -71,7 +79,7 @@ public final class HostBlocker {
         if (normalized == null) {
             return false;
         }
-        if (containsDomain(allowedHosts, normalized)) {
+        if (containsDomain(allowedHosts, normalized) || isTemporarilyAllowed(normalized)) {
             return false;
         }
         return containsDomain(blockedHosts, normalized);
@@ -82,7 +90,7 @@ public final class HostBlocker {
         if (normalized == null) {
             return false;
         }
-        if (containsDomain(allowedHosts, normalized)) {
+        if (containsDomain(allowedHosts, normalized) || isTemporarilyAllowed(normalized)) {
             return false;
         }
         return containsDomain(securityHosts, normalized);
@@ -93,7 +101,88 @@ public final class HostBlocker {
         if (normalized == null) {
             return false;
         }
-        return containsDomain(allowedHosts, normalized);
+        return containsDomain(allowedHosts, normalized) || isTemporarilyAllowed(normalized);
+    }
+
+    /**
+     * Allow {@code domain} (and its subdomains) for {@code durationMillis} from now, without
+     * touching the persistent allowlist. Used by the "Allow once" / false-positive-recovery flow.
+     */
+    public void allowTemporarily(String domain, long durationMillis) {
+        String normalized = normalizeDomain(domain);
+        if (normalized == null || durationMillis <= 0L) {
+            return;
+        }
+        temporaryAllow.put(normalized, System.currentTimeMillis() + durationMillis);
+    }
+
+    /** Remaining milliseconds the domain is temporarily allowed, or 0 if not (purges if expired). */
+    public long temporaryAllowRemaining(String domain) {
+        String normalized = normalizeDomain(domain);
+        if (normalized == null) {
+            return 0L;
+        }
+        Long expiry = temporaryAllow.get(normalized);
+        if (expiry == null) {
+            return 0L;
+        }
+        long remaining = expiry - System.currentTimeMillis();
+        if (remaining <= 0L) {
+            temporaryAllow.remove(normalized);
+            return 0L;
+        }
+        return remaining;
+    }
+
+    /**
+     * Snapshot of the currently-active temporary allows as (domain -> remaining millis), so the UI
+     * can show and manage live reprieves. Expired entries are purged as a side effect.
+     */
+    public java.util.Map<String, Long> temporaryAllowSnapshot() {
+        if (temporaryAllow.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        long now = System.currentTimeMillis();
+        java.util.HashMap<String, Long> out = new java.util.HashMap<>();
+        for (java.util.Map.Entry<String, Long> entry : temporaryAllow.entrySet()) {
+            long remaining = entry.getValue() - now;
+            if (remaining > 0L) {
+                out.put(entry.getKey(), remaining);
+            } else {
+                temporaryAllow.remove(entry.getKey());
+            }
+        }
+        return out;
+    }
+
+    /** Cancel a temporary allow before it expires (the "Undo" on an active reprieve). */
+    public void clearTemporaryAllow(String domain) {
+        String normalized = normalizeDomain(domain);
+        if (normalized != null) {
+            temporaryAllow.remove(normalized);
+        }
+    }
+
+    private boolean isTemporarilyAllowed(String normalized) {
+        if (temporaryAllow.isEmpty()) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        String cursor = normalized;
+        while (true) {
+            Long expiry = temporaryAllow.get(cursor);
+            if (expiry != null) {
+                if (expiry > now) {
+                    return true;
+                }
+                temporaryAllow.remove(cursor);
+            }
+            int dot = cursor.indexOf('.');
+            if (dot < 0) {
+                return false;
+            }
+            cursor = cursor.substring(dot + 1);
+        }
     }
 
     public Snapshot snapshot() {

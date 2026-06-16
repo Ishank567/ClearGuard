@@ -48,6 +48,20 @@ import com.clearguard.app.ui.components.ClearSwitch
 import com.clearguard.app.ui.theme.ThemeMode
 import com.clearguard.app.vpn.ClearGuardVpnService
 
+/**
+ * Whether the Instagram ad-skipper AccessibilityService is currently enabled in system settings.
+ * Matched on package + class name so it holds for either ComponentName form the OS may store.
+ */
+private fun isInstagramSkipperEnabled(context: Context): Boolean {
+    val enabled = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    ) ?: return false
+    return enabled.split(':').any {
+        it.contains(context.packageName) && it.contains("InstagramAdSkipperService")
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -125,6 +139,12 @@ fun SettingsScreen(
     }
     var regionalIndia by remember {
         mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_REGIONAL_PACK_INDIA, PreferenceKeys.DEFAULT_REGIONAL_PACK_INDIA))
+    }
+    var metaAdPack by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_META_AD_PACK, PreferenceKeys.DEFAULT_META_AD_PACK))
+    }
+    var igAdSkipper by remember {
+        mutableStateOf(prefs.getBoolean(PreferenceKeys.KEY_IG_AD_SKIPPER_ENABLED, PreferenceKeys.DEFAULT_IG_AD_SKIPPER_ENABLED))
     }
     var religiousClean by remember {
         mutableStateOf(prefs.getBoolean("religious_clean_enabled", false))
@@ -461,8 +481,6 @@ fun SettingsScreen(
             }
         }
 
-        }} // close Column + AnimatedVisibility for Firewall section
-
         // --- SECTION 2: AI scam heuristics & regional packs ---
         var scamExpanded by remember { mutableStateOf(true) }
         SectionHeader(
@@ -769,6 +787,89 @@ fun SettingsScreen(
             }
         }
 
+        // Meta / Instagram tracker & ad-telemetry pack (DNS level)
+        GlassCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Meta / Instagram Tracker Pack", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(
+                        "Block Meta ad-network, analytics & pixel hosts (also kills Facebook Audience Network ads in other apps). Note: can't remove Instagram's in-app video ads — those share the same servers as real posts.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                ClearSwitch(
+                    checked = metaAdPack,
+                    onCheckedChange = {
+                        metaAdPack = it
+                        prefs.edit().putBoolean(PreferenceKeys.KEY_META_AD_PACK, it).apply()
+                        ClearGuardVpnService.reloadIfRunning(context)
+                    }
+                )
+            }
+        }
+
+        // Instagram in-app ad-skipper (AccessibilityService)
+        val igSkipperGranted = isInstagramSkipperEnabled(context)
+        GlassCard {
+            Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Instagram Ad-Skipper (beta)", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                        Text(
+                            "Scrolls past “Sponsored” feed & Reels ads inside the Instagram app. Needs Accessibility access. Fully on-device & private — it only looks for the ad label, never your content. Best-effort.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    ClearSwitch(
+                        checked = igAdSkipper,
+                        onCheckedChange = {
+                            igAdSkipper = it
+                            prefs.edit().putBoolean(PreferenceKeys.KEY_IG_AD_SKIPPER_ENABLED, it).apply()
+                            if (it && !isInstagramSkipperEnabled(context)) {
+                                try {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    )
+                }
+                if (igAdSkipper && !igSkipperGranted) {
+                    Spacer(Modifier.height(10.dp))
+                    SecondaryButton(
+                        onClick = {
+                            try {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            } catch (_: Exception) {}
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        accent = MaterialTheme.colorScheme.warning
+                    ) {
+                        Icon(Icons.Default.Accessibility, contentDescription = null, tint = MaterialTheme.colorScheme.warning, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Turn on Accessibility access", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.warning)
+                    }
+                }
+            }
+        }
+
         // Religious clean mode
         GlassCard {
             Row(
@@ -1061,6 +1162,8 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(30.dp))
+            }
+        } // close Column + AnimatedVisibility for DNS section
     }
 
     // App Picker dialog routing
