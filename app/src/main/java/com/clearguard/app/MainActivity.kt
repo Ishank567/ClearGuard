@@ -99,19 +99,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Debug-only main-thread watchdog. If any UI freeze is caused by disk/network work on the
-        // main thread (a stray reload(), file read, or first SharedPreferences load), StrictMode
-        // logs it to logcat (tag "StrictMode") with a stack trace — turning an intermittent freeze
-        // into concrete evidence. penaltyLog() only logs; it never crashes. No effect in release.
-        if ((applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-            android.os.StrictMode.setThreadPolicy(
-                android.os.StrictMode.ThreadPolicy.Builder()
-                    .detectAll()
-                    .penaltyLog()
-                    .build()
-            )
-        }
-
         try {
             PreferenceKeys.ensureDefaults(this)
         } catch (e: Exception) {
@@ -169,6 +156,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             ClearGuardTheme {
                 ClearGuardApp(sharedScamText = sharedScamText)
+            }
+        }
+
+        // Debug-only main-thread watchdog — enabled after the first frame so cold-start prefs/Compose
+        // work does not compete with initial layout (which showed up as launch ANRs on slow devices).
+        if ((applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            window.decorView.post {
+                android.os.StrictMode.setThreadPolicy(
+                    android.os.StrictMode.ThreadPolicy.Builder()
+                        .detectAll()
+                        .penaltyLog()
+                        .build()
+                )
             }
         }
     }

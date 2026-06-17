@@ -36,6 +36,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -82,6 +83,12 @@ public final class ClearGuardVpnService extends VpnService {
     private SharedPreferences prefs;
     private Thread workerThread;
     private ExecutorService queryExecutor;
+    /** Parses blocklists off the main thread — reload() on the UI thread caused bind ANRs. */
+    private final ExecutorService initExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "ShieldDNS-Init");
+        thread.setDaemon(true);
+        return thread;
+    });
     private DohResolver dohResolver;
     private ConnectivityManager.NetworkCallback wifiProtectionCallback;
 
@@ -191,7 +198,14 @@ public final class ClearGuardVpnService extends VpnService {
         PreferenceKeys.ensureDefaults(this);
         prefs = PreferenceKeys.prefs(this);
         blocker = HostBlocker.get(this);
-        blocker.reload();
+        // Warm the blocklist asynchronously. Parsing the downloaded hosts file on the service main
+        // thread blocked onBind/onCreate and triggered "Timed out while trying to bind" ANRs.
+        initExecutor.execute(() -> {
+            try {
+                blocker.reload();
+            } catch (Exception ignored) {
+            }
+        });
         allowedTotal = prefs.getLong(PreferenceKeys.KEY_ALLOWED_COUNT, 0L);
         blockedTotal = prefs.getLong(PreferenceKeys.KEY_BLOCKED_COUNT, 0L);
         blockedToday = prefs.getLong(PreferenceKeys.KEY_BLOCKED_TODAY, 0L);
@@ -225,11 +239,18 @@ public final class ClearGuardVpnService extends VpnService {
             return START_NOT_STICKY;
         }
         if (ACTION_RELOAD.equals(action)) {
-            blocker.reload();
-            responseCache.clear();
-            loadDohConfig();
-            unregisterWifiProtection();
-            registerWifiProtection();
+            initExecutor.execute(() -> {
+                try {
+                    blocker.reload();
+                } catch (Exception ignored) {
+                }
+                responseCache.clear();
+                loadDohConfig();
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    unregisterWifiProtection();
+                    registerWifiProtection();
+                });
+            });
             if (!running.get()) {
                 stopSelf(startId);
                 return START_NOT_STICKY;
@@ -257,6 +278,7 @@ public final class ClearGuardVpnService extends VpnService {
             dohResolver.shutdown();
         }
         unregisterWifiProtection();
+        initExecutor.shutdown();
         super.onDestroy();
     }
 
