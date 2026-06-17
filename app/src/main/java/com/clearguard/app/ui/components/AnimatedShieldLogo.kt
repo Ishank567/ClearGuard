@@ -47,8 +47,20 @@ fun AnimatedShieldLogo(
     modifier: Modifier = Modifier,
     diameter: Dp = 104.dp,
     accent: Color = MaterialTheme.colorScheme.primary,
-    active: Boolean = true
+    active: Boolean = true,
+    animate: Boolean = true
 ) {
+    if (!animate) {
+        Box(modifier = modifier.size(diameter), contentAlignment = Alignment.Center) {
+            Image(
+                painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                contentDescription = "ShieldDNS",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(0.64f)
+            )
+        }
+        return
+    }
     val transition = rememberInfiniteTransition(label = "shieldLogo")
 
     val breathe by transition.animateFloat(

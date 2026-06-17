@@ -34,8 +34,29 @@ fun ShieldMeshBackground(
     accent: Color = MaterialTheme.colorScheme.primary,
     secondary: Color = MaterialTheme.colorScheme.secondary,
     active: Boolean = true,
+    animate: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
+    if (!animate) {
+        Box(modifier = modifier.fillMaxSize()) {
+            Canvas(Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+                drawMeshOrb(
+                    center = Offset(w * 0.15f, h * 0.12f),
+                    radius = w * 0.42f,
+                    color = accent.copy(alpha = 0.10f)
+                )
+                drawMeshOrb(
+                    center = Offset(w * 0.88f, h * 0.22f),
+                    radius = w * 0.34f,
+                    color = secondary.copy(alpha = 0.08f)
+                )
+            }
+            content()
+        }
+        return
+    }
     val transition = rememberInfiniteTransition(label = "meshBg")
     val phase by transition.animateFloat(
         initialValue = 0f,
@@ -51,7 +72,7 @@ fun ShieldMeshBackground(
     )
 
     val particles = remember {
-        List(14) {
+        List(8) {
             Particle(
                 seed = Random(it * 31 + 7).nextFloat(),
                 orbit = 0.18f + Random(it).nextFloat() * 0.32f,
@@ -102,20 +123,6 @@ fun ShieldMeshBackground(
                 }
             }
 
-            if (active) {
-                val gridAlpha = 0.035f * (0.6f + 0.4f * breathe)
-                val step = 48f
-                var x = 0f
-                while (x < w) {
-                    drawLine(accent.copy(alpha = gridAlpha), Offset(x, 0f), Offset(x, h), strokeWidth = 1f)
-                    x += step
-                }
-                var y = 0f
-                while (y < h) {
-                    drawLine(accent.copy(alpha = gridAlpha), Offset(0f, y), Offset(w, y), strokeWidth = 1f)
-                    y += step
-                }
-            }
         }
         content()
     }

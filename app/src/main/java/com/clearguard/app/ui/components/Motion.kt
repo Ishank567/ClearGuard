@@ -1,14 +1,12 @@
 package com.clearguard.app.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,6 +18,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+
+/** Defer infinite animations until after the first frame to avoid launch ANRs on cold start. */
+@Composable
+fun rememberAnimationsEnabled(deferMs: Long = 500): Boolean {
+    var enabled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(deferMs)
+        enabled = true
+    }
+    return enabled
+}
 
 /** Tactile 3D press for buttons and interactive cards. */
 fun Modifier.press3D(
@@ -50,21 +59,41 @@ fun Modifier.press3D(
     }
 }
 
-/** Staggered entrance for dashboard sections and cards. */
+/**
+ * Staggered fade/slide-in without [AnimatedVisibility] inside a scrollable [Column] —
+ * that combination has caused measurement crashes on some devices.
+ */
 @Composable
 fun StaggeredEntrance(
     index: Int,
     delayPerItemMs: Int = 70,
+    enabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    if (!enabled) {
+        content()
+        return
+    }
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay((index * delayPerItemMs).toLong())
         visible = true
     }
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(tween(380)) + slideInVertically(tween(380)) { it / 5 }
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(380, easing = FastOutSlowInEasing),
+        label = "staggerAlpha_$index"
+    )
+    val offsetY by animateFloatAsState(
+        targetValue = if (visible) 0f else 24f,
+        animationSpec = tween(380, easing = FastOutSlowInEasing),
+        label = "staggerOffset_$index"
+    )
+    Box(
+        modifier = Modifier.graphicsLayer {
+            this.alpha = alpha
+            translationY = offsetY
+        }
     ) {
         content()
     }

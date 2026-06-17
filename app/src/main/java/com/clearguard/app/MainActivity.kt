@@ -100,12 +100,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        try {
-            PreferenceKeys.ensureDefaults(this)
-        } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "ensureDefaults failed (non-fatal): ${e.message}")
-        }
-
         // ShieldDNS uses a single light theme — ignore system dark mode.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             getSystemService(UiModeManager::class.java)
@@ -118,6 +112,7 @@ class MainActivity : ComponentActivity() {
         // render the initial UI, so kick it off the main thread.
         lifecycleScope.launch(Dispatchers.IO) {
             try {
+                PreferenceKeys.ensureDefaults(this@MainActivity)
                 HostBlocker.get(this@MainActivity).reload()
                 BlocklistUpdateWorker.sync(this@MainActivity)
 
@@ -160,18 +155,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Debug-only main-thread watchdog — enabled after the first frame so cold-start prefs/Compose
-        // work does not compete with initial layout (which showed up as launch ANRs on slow devices).
-        if ((applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-            window.decorView.post {
-                android.os.StrictMode.setThreadPolicy(
-                    android.os.StrictMode.ThreadPolicy.Builder()
-                        .detectAll()
-                        .penaltyLog()
-                        .build()
-                )
-            }
-        }
+
     }
 }
 
@@ -347,41 +331,43 @@ fun ClearGuardApp(sharedScamText: String? = null) {
                 tonalElevation = 0.dp
             ) {
                 AppScreen.entries.forEach { screen ->
-                    val selected = currentScreen == screen
-                    val iconScale by animateFloatAsState(
-                        targetValue = if (selected) 1.14f else 1f,
-                        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
-                        label = "navIconScale"
-                    )
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = { currentScreen = screen },
-                        icon = {
-                            Icon(
-                                screen.icon,
-                                contentDescription = screen.title,
-                                modifier = Modifier
-                                    .size(22.dp)
-                                    .graphicsLayer {
-                                        scaleX = iconScale
-                                        scaleY = iconScale
-                                    }
-                            )
-                        },
-                        label = {
-                            Text(
-                                screen.title,
-                                fontSize = 11.sp,
-                                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    key(screen.name) {
+                        val selected = currentScreen == screen
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (selected) 1.14f else 1f,
+                            animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
+                            label = "navIconScale_${screen.name}"
                         )
-                    )
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = { currentScreen = screen },
+                            icon = {
+                                Icon(
+                                    screen.icon,
+                                    contentDescription = screen.title,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .graphicsLayer {
+                                            scaleX = iconScale
+                                            scaleY = iconScale
+                                        }
+                                )
+                            },
+                            label = {
+                                Text(
+                                    screen.title,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                    }
                 }
             }
         }

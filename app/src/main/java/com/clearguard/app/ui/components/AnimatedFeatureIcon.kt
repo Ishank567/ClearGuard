@@ -36,8 +36,20 @@ fun AnimatedFeatureIcon(
     icon: ImageVector,
     modifier: Modifier = Modifier,
     size: Dp = 88.dp,
-    accent: Color = MaterialTheme.colorScheme.primary
+    accent: Color = MaterialTheme.colorScheme.primary,
+    animate: Boolean = true
 ) {
+    if (!animate) {
+        Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.fillMaxSize(0.44f)
+            )
+        }
+        return
+    }
     val transition = rememberInfiniteTransition(label = "featureIcon")
     val orbit by transition.animateFloat(
         initialValue = 0f,

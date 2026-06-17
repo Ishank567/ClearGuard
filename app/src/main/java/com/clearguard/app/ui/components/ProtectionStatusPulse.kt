@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,8 +34,32 @@ import androidx.compose.ui.unit.sp
 fun ProtectionStatusPulse(
     isProtected: Boolean,
     modifier: Modifier = Modifier,
-    accent: Color = MaterialTheme.colorScheme.primary
+    accent: Color = MaterialTheme.colorScheme.primary,
+    animate: Boolean = true
 ) {
+    if (!animate || !isProtected) {
+        val label = if (isProtected) "Protected" else "Protection Paused"
+        val color = if (isProtected) accent else MaterialTheme.colorScheme.onSurfaceVariant
+        val inactiveDot = MaterialTheme.colorScheme.outline
+        Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                Canvas(Modifier.size(10.dp)) {
+                    drawCircle(
+                        color = if (isProtected) accent else inactiveDot,
+                        radius = size.minDimension / 2f
+                    )
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = label,
+                fontSize = 34.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = color
+            )
+        }
+        return
+    }
     val transition = rememberInfiniteTransition(label = "statusPulse")
     val ring by transition.animateFloat(
         initialValue = 0.35f,
@@ -74,7 +99,14 @@ fun ProtectionStatusPulse(
                     )
                 }
             }
-            Canvas(Modifier.size((10 * dotPulse).dp)) {
+            Canvas(
+                Modifier
+                    .size(10.dp)
+                    .graphicsLayer {
+                        scaleX = dotPulse
+                        scaleY = dotPulse
+                    }
+            ) {
                 drawCircle(
                     color = if (isProtected) accent else inactiveDot,
                     radius = size.minDimension / 2f

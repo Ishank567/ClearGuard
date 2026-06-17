@@ -16,6 +16,7 @@ import com.clearguard.app.ui.components.AnimatedFeatureIcon
 import com.clearguard.app.ui.components.AnimatedPageIndicator
 import com.clearguard.app.ui.components.AnimatedShieldLogo
 import com.clearguard.app.ui.components.ShieldMeshBackground
+import com.clearguard.app.ui.components.rememberAnimationsEnabled
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,8 +60,13 @@ private val pages = listOf(
 fun OnboardingScreen(onComplete: (startProtection: Boolean) -> Unit) {
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val coroutineScope = rememberCoroutineScope()
+    val animationsEnabled = rememberAnimationsEnabled()
 
-    ShieldMeshBackground(modifier = Modifier.fillMaxSize(), active = true) {
+    ShieldMeshBackground(
+        modifier = Modifier.fillMaxSize(),
+        active = true,
+        animate = animationsEnabled
+    ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -98,13 +104,15 @@ fun OnboardingScreen(onComplete: (startProtection: Boolean) -> Unit) {
                         diameter = 96.dp,
                         accent = MaterialTheme.colorScheme.primary,
                         active = true,
+                        animate = animationsEnabled,
                         modifier = Modifier.padding(bottom = 24.dp)
                     )
                 } else {
                     AnimatedFeatureIcon(
                         icon = item.icon,
                         modifier = Modifier.padding(bottom = 24.dp),
-                        size = 96.dp
+                        size = 96.dp,
+                        animate = animationsEnabled
                     )
                 }
 
