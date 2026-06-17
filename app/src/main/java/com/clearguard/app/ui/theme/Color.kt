@@ -13,11 +13,13 @@ object ClearColors {
     val text = Color(0xFF0F172A)
     val muted = Color(0xFF475569)
     val border = Color(0xFFCBD5E1)
-    val bg = Color(0xFFF8FAFC)
+    val bg = BubbleGlass.bgMid
     val danger = Color(0xFFDC2626)
     val warning = Color(0xFFD97706)
     val success = Color(0xFF059669)
-    val panel = Color(0xFFFFFFFF)
+    val panel = BubbleGlass.surfaceTop
+    val glass = BubbleGlass.surfaceTop
+    val glassBorder = BubbleGlass.borderHighlight
 }
 
 val ColorScheme.green: Color get() = ClearColors.green

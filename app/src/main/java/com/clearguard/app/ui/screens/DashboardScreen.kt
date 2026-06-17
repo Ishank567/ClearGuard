@@ -125,18 +125,13 @@ fun DashboardScreen(
         }
     )
 
-    ShieldMeshBackground(
-        modifier = Modifier.fillMaxSize(),
-        active = isProtected,
-        animate = animationsEnabled
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(28.dp)
-        ) {
         // ========== HERO: Status + Primary Action ==========
         StaggeredEntrance(index = 0, enabled = animationsEnabled) {
         Column(
@@ -336,7 +331,6 @@ fun DashboardScreen(
                     StatusRow("Telemetry", "None — fully on-device")
                 }
             }
-        }
         }
         }
     }

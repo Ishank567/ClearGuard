@@ -15,7 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.clearguard.app.ui.components.AnimatedFeatureIcon
 import com.clearguard.app.ui.components.AnimatedPageIndicator
 import com.clearguard.app.ui.components.AnimatedShieldLogo
-import com.clearguard.app.ui.components.ShieldMeshBackground
+import com.clearguard.app.ui.components.BubbleGlassBackground
 import com.clearguard.app.ui.components.rememberAnimationsEnabled
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -62,7 +62,7 @@ fun OnboardingScreen(onComplete: (startProtection: Boolean) -> Unit) {
     val coroutineScope = rememberCoroutineScope()
     val animationsEnabled = rememberAnimationsEnabled()
 
-    ShieldMeshBackground(
+    BubbleGlassBackground(
         modifier = Modifier.fillMaxSize(),
         active = true,
         animate = animationsEnabled

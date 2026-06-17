@@ -11,25 +11,26 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// Classy, minimal, modern palette for ShieldDNS — light theme only.
-// Deep trustworthy teal primary. Clean surfaces. Excellent contrast and breathing room.
+// Bubble-glass light theme — airy gradient backdrop, frosted translucent surfaces.
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF0F766E),           // Rich, calm teal
+    primary = Color(0xFF0F766E),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFCCFBF1),
     onPrimaryContainer = Color(0xFF00201C),
-    secondary = Color(0xFF1E40AF),         // Deep blue for secondary actions
+    secondary = Color(0xFF1E40AF),
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFDBEAFE),
     onSecondaryContainer = Color(0xFF001D36),
-    background = Color(0xFFF8FAFC),        // Soft, clean off-white
+    tertiary = Color(0xFF0891B2),
+    onTertiary = Color.White,
+    background = BubbleGlass.bgMid,
     onBackground = Color(0xFF0F172A),
-    surface = Color.White,
+    surface = BubbleGlass.surfaceTop,
     onSurface = Color(0xFF0F172A),
-    surfaceVariant = Color(0xFFF1F5F9),
+    surfaceVariant = Color(0xCCFFFFFF),
     onSurfaceVariant = Color(0xFF475569),
-    outline = Color(0xFFE2E8F0),
-    outlineVariant = Color(0xFFF1F5F9),
+    outline = Color(0x66FFFFFF),
+    outlineVariant = Color(0x330F766E),
     error = Color(0xFFDC2626),
     onError = Color.White
 )
@@ -44,9 +45,9 @@ fun ShieldDNSTheme(content: @Composable () -> Unit) {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
             if (Build.VERSION.SDK_INT < 35) {
                 @Suppress("DEPRECATION")
-                window.statusBarColor = colorScheme.background.toArgb()
+                window.statusBarColor = BubbleGlass.bgTop.toArgb()
                 @Suppress("DEPRECATION")
-                window.navigationBarColor = colorScheme.background.toArgb()
+                window.navigationBarColor = BubbleGlass.bgBottom.toArgb()
             }
             val controller = WindowCompat.getInsetsController(window, view)
             controller.isAppearanceLightStatusBars = true

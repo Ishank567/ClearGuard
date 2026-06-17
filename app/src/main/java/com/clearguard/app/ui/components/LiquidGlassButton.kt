@@ -1,5 +1,7 @@
 package com.clearguard.app.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,13 +17,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.clearguard.app.ui.theme.BubbleGlass
 
-/**
- * Classy primary action button for the fresh modern UI.
- */
 @Composable
 fun LiquidGlassButton(
     onClick: () -> Unit,
@@ -29,26 +33,48 @@ fun LiquidGlassButton(
     enabled: Boolean = true,
     accent: Color = MaterialTheme.colorScheme.primary,
     contentColor: Color = MaterialTheme.colorScheme.onPrimary,
-    cornerRadius: Dp = 16.dp,
+    cornerRadius: Dp = BubbleGlass.compactRadius,
     contentPadding: PaddingValues = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
     content: @Composable RowScope.() -> Unit
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val shape = RoundedCornerShape(cornerRadius)
+
     Button(
         onClick = onClick,
-        modifier = modifier.press3D(pressed),
+        modifier = modifier
+            .scale(if (pressed) 0.97f else 1f)
+            .shadow(if (pressed) 2.dp else 10.dp, shape, spotColor = accent.copy(alpha = 0.35f))
+            .clip(shape)
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        accent.copy(alpha = 0.95f),
+                        accent,
+                        accent.copy(alpha = 0.82f)
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.55f),
+                        accent.copy(alpha = 0.35f)
+                    )
+                ),
+                shape = shape
+            )
+            .press3D(pressed, pressedScale = 1f),
         enabled = enabled,
-        shape = RoundedCornerShape(cornerRadius),
+        shape = shape,
         colors = ButtonDefaults.buttonColors(
-            containerColor = accent,
-            contentColor = contentColor
+            containerColor = Color.Transparent,
+            contentColor = contentColor,
+            disabledContainerColor = Color.Transparent
         ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 8.dp,
-            pressedElevation = 2.dp,
-            hoveredElevation = 10.dp
-        ),
+        elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
         contentPadding = contentPadding,
         interactionSource = interaction,
         content = content
@@ -67,19 +93,24 @@ fun LiquidGlassIconButton(
 ) {
     FilledTonalButton(
         onClick = onClick,
-        modifier = modifier.size(size),
+        modifier = modifier
+            .size(size)
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.45f),
+                shape = RoundedCornerShape(size / 2)
+            ),
         enabled = enabled,
         shape = RoundedCornerShape(size / 2),
         colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = accent.copy(alpha = 0.12f),
-            contentColor = accent
+            containerColor = BubbleGlass.surfaceTop.copy(alpha = 0.75f),
+            contentColor = contentColor
         ),
         contentPadding = PaddingValues(0.dp),
         content = content
     )
 }
 
-// Recommended clean helpers for the new UI
 @Composable
 fun PrimaryButton(
     onClick: () -> Unit,
@@ -87,28 +118,19 @@ fun PrimaryButton(
     enabled: Boolean = true,
     accent: Color = MaterialTheme.colorScheme.primary,
     contentColor: Color = MaterialTheme.colorScheme.onPrimary,
-    cornerRadius: Dp = 12.dp,
+    cornerRadius: Dp = BubbleGlass.compactRadius,
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
     content: @Composable RowScope.() -> Unit
-) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    Button(
-        onClick = onClick,
-        modifier = modifier.press3D(pressed),
-        enabled = enabled,
-        shape = RoundedCornerShape(cornerRadius),
-        colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = contentColor),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 6.dp,
-            pressedElevation = 1.dp,
-            hoveredElevation = 8.dp
-        ),
-        contentPadding = contentPadding,
-        interactionSource = interaction,
-        content = content
-    )
-}
+) = LiquidGlassButton(
+    onClick = onClick,
+    modifier = modifier,
+    enabled = enabled,
+    accent = accent,
+    contentColor = contentColor,
+    cornerRadius = cornerRadius,
+    contentPadding = contentPadding,
+    content = content
+)
 
 @Composable
 fun SecondaryButton(
@@ -116,14 +138,29 @@ fun SecondaryButton(
     modifier: Modifier = Modifier,
     accent: Color = MaterialTheme.colorScheme.primary,
     contentColor: Color = accent,
-    cornerRadius: Dp = 12.dp,
+    cornerRadius: Dp = BubbleGlass.compactRadius,
     contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
     content: @Composable RowScope.() -> Unit
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.7f),
+                        accent.copy(alpha = 0.25f)
+                    )
+                ),
+                shape = RoundedCornerShape(cornerRadius)
+            ),
         shape = RoundedCornerShape(cornerRadius),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = BubbleGlass.surfaceTop.copy(alpha = 0.55f),
+            contentColor = contentColor
+        ),
+        contentPadding = contentPadding,
         content = content
     )
 }

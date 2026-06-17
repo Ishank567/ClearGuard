@@ -2,6 +2,7 @@ package com.clearguard.app.ui.screens
 import com.clearguard.app.ui.components.*
 
 import com.clearguard.app.ui.theme.*
+import com.clearguard.app.ui.theme.bubbleGlass
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
@@ -107,14 +108,7 @@ fun PrivacyScreen(
     initialScanText: String? = null
 ) {
     var selectedTab by remember { mutableStateOf(if (initialScanText != null) 3 else 0) }
-    val animationsEnabled = rememberAnimationsEnabled()
-
-    ShieldMeshBackground(
-        modifier = Modifier.fillMaxSize(),
-        active = true,
-        animate = animationsEnabled
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -181,7 +175,6 @@ fun PrivacyScreen(
                 }
             }
         }
-    }
 }
 
 @Composable
@@ -216,18 +209,18 @@ private fun PrivacyTabBar(
                 },
                 modifier = Modifier.weight(1f),
                 colors = FilterChipDefaults.filterChipColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = com.clearguard.app.ui.theme.BubbleGlass.surfaceBottom.copy(alpha = 0.55f),
                     labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    selectedContainerColor = com.clearguard.app.ui.theme.BubbleGlass.surfaceTop.copy(alpha = 0.92f),
+                    selectedLabelColor = MaterialTheme.colorScheme.primary,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.primary
                 ),
                 border = FilterChipDefaults.filterChipBorder(
                     enabled = true,
                     selected = selected,
-                    borderColor = MaterialTheme.colorScheme.outlineVariant,
-                    selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                    borderColor = com.clearguard.app.ui.theme.BubbleGlass.borderHighlight.copy(alpha = 0.5f),
+                    selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                 )
             )
         }
@@ -251,9 +244,12 @@ private fun PrivacyCardHeader(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.weight(1f)
         ) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+            Box(
+                modifier = Modifier.bubbleGlass(
+                    shape = RoundedCornerShape(12.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                    elevation = 4.dp
+                )
             ) {
                 Icon(
                     icon,

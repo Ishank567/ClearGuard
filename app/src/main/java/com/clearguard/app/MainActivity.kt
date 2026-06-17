@@ -83,6 +83,10 @@ import com.clearguard.app.ui.screens.PrivacyScreen
 import com.clearguard.app.ui.screens.OnboardingScreen
 import com.clearguard.app.ui.screens.SettingsScreen
 import com.clearguard.app.ui.theme.ClearGuardTheme
+import com.clearguard.app.ui.theme.BubbleGlass
+import com.clearguard.app.ui.theme.bubbleGlass
+import com.clearguard.app.ui.components.BubbleGlassBackground
+import com.clearguard.app.ui.components.rememberAnimationsEnabled
 
 import com.clearguard.app.vpn.ClearGuardVpnService
 import androidx.compose.material3.*
@@ -306,8 +310,11 @@ fun ClearGuardApp(sharedScamText: String? = null) {
         }
     }
 
+    val animationsEnabled = rememberAnimationsEnabled()
+
     @OptIn(ExperimentalMaterial3Api::class)
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             // Clean, minimal top bar — title only when needed. Dashboard has its own strong hero,
             // and Activity renders its own header row (with the Clear action), so skip both.
@@ -320,16 +327,29 @@ fun ClearGuardApp(sharedScamText: String? = null) {
                         )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
+                        containerColor = Color.Transparent
                     )
                 )
             }
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
+                NavigationBar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .bubbleGlass(
+                            shape = RoundedCornerShape(BubbleGlass.navRadius),
+                            tint = MaterialTheme.colorScheme.primary,
+                            elevation = 14.dp
+                        ),
+                    containerColor = Color.Transparent,
+                    tonalElevation = 0.dp
+                ) {
                 AppScreen.entries.forEach { screen ->
                     key(screen.name) {
                         val selected = currentScreen == screen
@@ -369,14 +389,20 @@ fun ClearGuardApp(sharedScamText: String? = null) {
                         )
                     }
                 }
+                }
             }
         }
     ) { innerPadding ->
-        AnimatedContent(
-            targetState = currentScreen,
+        BubbleGlassBackground(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPadding),
+            active = isProtected,
+            animate = animationsEnabled
+        ) {
+        AnimatedContent(
+            targetState = currentScreen,
+            modifier = Modifier.fillMaxSize()
         ) { screen ->
             when (screen) {
                 AppScreen.Dashboard -> DashboardScreen(
@@ -432,6 +458,7 @@ fun ClearGuardApp(sharedScamText: String? = null) {
                     }
                 )
             }
+        }
         }
     }
 }
