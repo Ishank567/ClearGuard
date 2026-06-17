@@ -60,6 +60,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.foundation.Image
@@ -111,7 +112,11 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        PreferenceKeys.ensureDefaults(this)
+        try {
+            PreferenceKeys.ensureDefaults(this)
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "ensureDefaults failed (non-fatal): ${e.message}")
+        }
 
         // ShieldDNS uses a single light theme — ignore system dark mode.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -205,7 +210,7 @@ fun ClearGuardApp(sharedScamText: String? = null) {
     val blockedTodayState = remember { mutableStateOf(loadBlockedToday(context)) }
     val blockedTotalState = remember { mutableStateOf(loadBlockedTotal(context)) }
     val allowedTotalState = remember { mutableStateOf(loadAllowedTotal(context)) }
-    val activeRulesState = remember { mutableStateOf(loadActiveRules(context)) }
+    val activeRulesState = remember { mutableStateOf(0) }
     val cacheHitState = remember { mutableStateOf(loadCacheHits(context)) }
     val scamBlockedState = remember { mutableStateOf(loadScamBlocked(context)) }
     val scamBlockedTodayState = remember { mutableStateOf(loadScamBlockedToday(context)) }
@@ -223,7 +228,6 @@ fun ClearGuardApp(sharedScamText: String? = null) {
         blockedTodayState.value = loadBlockedToday(context)
         blockedTotalState.value = loadBlockedTotal(context)
         allowedTotalState.value = loadAllowedTotal(context)
-        activeRulesState.value = loadActiveRules(context)
         cacheHitState.value = loadCacheHits(context)
         scamBlockedState.value = loadScamBlocked(context)
         scamBlockedTodayState.value = loadScamBlockedToday(context)
@@ -235,12 +239,20 @@ fun ClearGuardApp(sharedScamText: String? = null) {
         dohQueryState.value = loadDohQueries(context)
     }
 
+    val scope = rememberCoroutineScope()
+    fun refreshActiveRulesAsync() {
+        scope.launch {
+            activeRulesState.value = withContext(Dispatchers.IO) { loadActiveRules(context) }
+        }
+    }
+
     // Listen for live stats updates from the VPN service (makes increments very visible)
     DisposableEffect(Unit) {
         val receiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
                 if (intent?.action == ClearGuardVpnService.ACTION_STATS_CHANGED) {
                     refreshStats()
+                    refreshActiveRulesAsync()
                 }
             }
         }
@@ -300,9 +312,11 @@ fun ClearGuardApp(sharedScamText: String? = null) {
     // Periodic safety-net sync + service liveness (the broadcast above drives immediate updates;
     // the service only flushes stats every ~15s, so this poll is intentionally unhurried).
     LaunchedEffect(Unit) {
+        refreshActiveRulesAsync()
         while (isActive) {
             isProtected = ClearGuardVpnService.isRunning()
             refreshStats()
+            refreshActiveRulesAsync()
             delay(if (isProtected) 5000L else 12000L)
         }
     }

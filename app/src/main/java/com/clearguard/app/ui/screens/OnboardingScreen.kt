@@ -1,6 +1,5 @@
 package com.clearguard.app.ui.screens
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -12,13 +11,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import com.clearguard.app.ui.components.AnimatedShieldLogo
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.clearguard.app.R
 import kotlinx.coroutines.launch
 
 private data class OnboardingPage(
@@ -92,14 +89,12 @@ fun OnboardingScreen(onComplete: (startProtection: Boolean) -> Unit) {
                 verticalArrangement = Arrangement.Center
             ) {
                 if (item.icon == null) {
-                    // Premium full logo for welcome page (high-quality asset)
-                    Image(
-                        painter = painterResource(id = R.drawable.shield_dns_logo_full),
-                        contentDescription = "ShieldDNS",
-                        modifier = Modifier
-                            .height(64.dp)
-                            .padding(bottom = 24.dp),
-                        contentScale = ContentScale.Fit
+                    // Vector launcher mark — avoids decoding large PNGs on low-RAM devices at first launch.
+                    AnimatedShieldLogo(
+                        diameter = 96.dp,
+                        accent = MaterialTheme.colorScheme.primary,
+                        active = true,
+                        modifier = Modifier.padding(bottom = 24.dp)
                     )
                 } else {
                     Icon(

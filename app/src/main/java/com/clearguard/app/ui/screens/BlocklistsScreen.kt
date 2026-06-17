@@ -89,7 +89,7 @@ fun BlocklistsScreen() {
 
     var updating by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf("") }
-    var activeHosts by remember { mutableStateOf(HostBlocker.get(context).snapshot().blockedHostCount) }
+    var activeHosts by remember { mutableStateOf(0) }
     var downloadedHosts by remember { mutableStateOf(prefs.getInt(PreferenceKeys.KEY_LAST_UPDATE_COUNT, 0)) }
 
     // Filter sources (the blocklist URLs) — user-editable.
@@ -131,6 +131,16 @@ fun BlocklistsScreen() {
     // detectConflicts() parses the whole downloaded hosts file (can be tens of MB), so it MUST run
     // off the main thread — a LaunchedEffect body runs on the main dispatcher, so wrap it in IO or
     // it freezes the UI on screen open.
+    LaunchedEffect(Unit) {
+        activeHosts = withContext(Dispatchers.IO) {
+            try {
+                HostBlocker.get(context).snapshot().blockedHostCount
+            } catch (_: Exception) {
+                0
+            }
+        }
+    }
+
     LaunchedEffect(customBlocks.size, securityBlocks.size, allowList.size) {
         if (customBlocks.isNotEmpty() || securityBlocks.isNotEmpty() || allowList.isNotEmpty()) {
             val found = withContext(Dispatchers.IO) {
@@ -142,7 +152,15 @@ fun BlocklistsScreen() {
     }
 
     fun refreshActiveHosts() {
-        activeHosts = HostBlocker.get(context).snapshot().blockedHostCount
+        scope.launch {
+            activeHosts = withContext(Dispatchers.IO) {
+                try {
+                    HostBlocker.get(context).snapshot().blockedHostCount
+                } catch (_: Exception) {
+                    0
+                }
+            }
+        }
     }
 
     // Re-read lists into the singleton and tell a running VPN to drop its cache.
@@ -457,6 +475,7 @@ fun BlocklistsScreen() {
                                     val added = applyPersonalBlockAI(context, aiQuery)
                                     customBlocks.addAll(added)
                                     aiQuery = ""
+                                    if (added.isNotEmpty()) applyRulesChanged()
                                 }
                             })
                         )
@@ -467,6 +486,7 @@ fun BlocklistsScreen() {
                                     val added = applyPersonalBlockAI(context, aiQuery)
                                     customBlocks.addAll(added)
                                     aiQuery = ""
+                                    if (added.isNotEmpty()) applyRulesChanged()
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -1090,8 +1110,6 @@ private fun applyPersonalBlockAI(context: Context, query: String): List<String> 
         }
     }
 
-    HostBlocker.get(context).reload()
-    ClearGuardVpnService.reloadIfRunning(context)
     return addedTerms
 }
 

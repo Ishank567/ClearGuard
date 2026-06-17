@@ -2074,12 +2074,12 @@ fun ScamScreenshotScanner(initialText: String? = null) {
                     }
                 }
 
-                if (selectedUri != null && bitmap != null) {
+                bitmap?.let { preview ->
                     Spacer(Modifier.height(12.dp))
                     Text("Selected image:", fontSize = 12.sp, color = ClearColors.muted)
                     Spacer(Modifier.height(6.dp))
                     Image(
-                        bitmap = bitmap!!.asImageBitmap(),
+                        bitmap = preview.asImageBitmap(),
                         contentDescription = "Uploaded screenshot",
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2108,9 +2108,9 @@ fun ScamScreenshotScanner(initialText: String? = null) {
             }
         }
 
-        if (errorMessage != null) {
+        errorMessage?.let { message ->
             GlassCard {
-                Text(errorMessage!!, color = ClearColors.danger, modifier = Modifier.padding(16.dp))
+                Text(message, color = ClearColors.danger, modifier = Modifier.padding(16.dp))
             }
         }
 
