@@ -8,12 +8,12 @@ import androidx.compose.ui.graphics.Color
  * New screens should prefer MaterialTheme.colorScheme directly.
  */
 object ClearColors {
-    val green = Color(0xFF0F766E)
-    val blue = Color(0xFF0369A1)
-    val text = Color(0xFF0F172A)
-    val muted = Color(0xFF475569)
-    val border = Color(0xFFCBD5E1)
-    val bg = BubbleGlass.bgMid
+    val green = Color(0xFFC2410C)
+    val blue = Color(0xFFBE185D)
+    val text = Color(0xFF431407)
+    val muted = Color(0xFF78350F)
+    val border = Color(0xFFFDBA74)
+    val bg = BubbleGlass.skyMid
     val danger = Color(0xFFDC2626)
     val warning = Color(0xFFD97706)
     val success = Color(0xFF059669)

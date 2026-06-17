@@ -27,7 +27,7 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * App-wide bubble-glass canvas: soft gradient sky + drifting translucent orbs with specular highlights.
+ * Sunset bubble-glass canvas: golden-hour sky, glowing sun disc, warm drifting orbs.
  */
 @Composable
 fun BubbleGlassBackground(
@@ -36,19 +36,20 @@ fun BubbleGlassBackground(
     animate: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val baseAlpha = if (active) 1f else 0.6f
+    val baseAlpha = if (active) 1f else 0.55f
     val primary = MaterialTheme.colorScheme.primary
     val secondary = MaterialTheme.colorScheme.secondary
+    val tertiary = MaterialTheme.colorScheme.tertiary
 
     val transition = if (animate) {
-        rememberInfiniteTransition(label = "bubbleGlass")
+        rememberInfiniteTransition(label = "sunsetBg")
     } else null
 
     val phase = if (transition != null) {
         val p by transition.animateFloat(
             initialValue = 0f,
             targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(16000, easing = LinearEasing), RepeatMode.Restart),
+            animationSpec = infiniteRepeatable(tween(18000, easing = LinearEasing), RepeatMode.Restart),
             label = "phase"
         )
         p
@@ -56,13 +57,34 @@ fun BubbleGlassBackground(
 
     val breathe = if (transition != null) {
         val b by transition.animateFloat(
-            initialValue = 0.88f,
+            initialValue = 0.90f,
             targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(5000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            animationSpec = infiniteRepeatable(tween(6000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "breathe"
         )
         b
     } else 1f
+
+    val sunPulse = if (transition != null) {
+        val s by transition.animateFloat(
+            initialValue = 0.94f,
+            targetValue = 1.06f,
+            animationSpec = infiniteRepeatable(tween(7000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "sunPulse"
+        )
+        s
+    } else 1f
+
+    val sunsetBubbles = remember {
+        listOf(
+            BubbleGlass.bubbleCoral,
+            BubbleGlass.bubblePeach,
+            BubbleGlass.bubbleMagenta,
+            BubbleGlass.bubbleGold,
+            primary.copy(alpha = 0.28f),
+            secondary.copy(alpha = 0.24f)
+        )
+    }
 
     val bubbles = remember {
         List(6) { i ->
@@ -70,9 +92,9 @@ fun BubbleGlassBackground(
                 seed = Random(i * 17 + 3).nextFloat(),
                 orbitX = 0.12f + Random(i).nextFloat() * 0.28f,
                 orbitY = 0.10f + Random(i).nextFloat() * 0.25f,
-                radiusFrac = 0.14f + Random(i).nextFloat() * 0.16f,
-                speed = 0.35f + Random(i).nextFloat() * 0.7f,
-                hue = i % 3
+                radiusFrac = 0.12f + Random(i).nextFloat() * 0.14f,
+                speed = 0.30f + Random(i).nextFloat() * 0.65f,
+                hue = i % sunsetBubbles.size
             )
         }
     }
@@ -80,52 +102,113 @@ fun BubbleGlassBackground(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(BubbleGlass.backgroundBrush())
+            .background(BubbleGlass.sunsetSkyBrush())
     ) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
 
+            // Horizon rose haze
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(BubbleGlass.bubbleMint, Color.Transparent),
-                    center = Offset(w * 0.5f, h * 0.08f),
-                    radius = w * 0.55f
+                    colors = listOf(
+                        BubbleGlass.sunHaze.copy(alpha = 0.55f * baseAlpha),
+                        BubbleGlass.skyMid.copy(alpha = 0.18f * baseAlpha),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.5f, h * 0.92f),
+                    radius = w * 0.85f
                 ),
-                radius = w * 0.55f,
-                center = Offset(w * 0.5f, h * 0.08f)
+                radius = w * 0.85f,
+                center = Offset(w * 0.5f, h * 0.92f)
+            )
+
+            // Setting sun — gentle pulse
+            val sunCenter = Offset(
+                x = w * (0.72f + 0.02f * sin(phase * 6.28f)),
+                y = h * (0.58f + 0.015f * cos(phase * 6.28f))
+            )
+            val sunRadius = w * 0.19f * sunPulse * breathe
+
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        BubbleGlass.sunGlow.copy(alpha = 0.42f * baseAlpha),
+                        BubbleGlass.sunGlow.copy(alpha = 0.14f * baseAlpha),
+                        Color.Transparent
+                    ),
+                    center = sunCenter,
+                    radius = sunRadius * 2.4f
+                ),
+                radius = sunRadius * 2.4f,
+                center = sunCenter
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        BubbleGlass.sunCore.copy(alpha = 0.95f * baseAlpha),
+                        BubbleGlass.sunGlow.copy(alpha = 0.75f * baseAlpha),
+                        BubbleGlass.skyMid.copy(alpha = 0.35f * baseAlpha)
+                    ),
+                    center = sunCenter - Offset(sunRadius * 0.08f, sunRadius * 0.12f),
+                    radius = sunRadius
+                ),
+                radius = sunRadius,
+                center = sunCenter
+            )
+            drawCircle(
+                color = Color.White.copy(alpha = 0.55f * baseAlpha),
+                radius = sunRadius * 0.14f,
+                center = sunCenter - Offset(sunRadius * 0.28f, sunRadius * 0.32f)
+            )
+
+            // Twilight cloud wash (upper sky)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        BubbleGlass.skyTop.copy(alpha = 0.35f * baseAlpha),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.28f, h * 0.06f),
+                    radius = w * 0.45f
+                ),
+                radius = w * 0.45f,
+                center = Offset(w * 0.28f, h * 0.06f)
             )
 
             bubbles.forEach { bubble ->
                 val angle = (phase * bubble.speed + bubble.seed) * 6.28f * 2f
                 val cx = w * (0.5f + bubble.orbitX * cos(angle + bubble.seed * 6.28f))
-                val cy = h * (0.42f + bubble.orbitY * sin(angle * 0.85f + bubble.seed * 4f))
+                val cy = h * (0.40f + bubble.orbitY * sin(angle * 0.85f + bubble.seed * 4f))
                 val radius = w * bubble.radiusFrac * breathe
-                val base = when (bubble.hue) {
-                    0 -> primary
-                    1 -> secondary
-                    else -> BubbleGlass.bubbleMint
+                val tint = when (bubble.hue) {
+                    0 -> BubbleGlass.bubbleCoral
+                    1 -> BubbleGlass.bubblePeach
+                    2 -> BubbleGlass.bubbleMagenta
+                    3 -> BubbleGlass.bubbleGold
+                    4 -> primary
+                    else -> tertiary
                 }
-                drawGlassBubble(center = Offset(cx, cy), radius = radius, tint = base, alpha = baseAlpha)
+                drawGlassBubble(center = Offset(cx, cy), radius = radius, tint = tint, alpha = baseAlpha)
             }
 
             drawGlassBubble(
                 center = Offset(
-                    w * (0.18f + 0.04f * sin(phase * 6.28f)),
-                    h * (0.78f + 0.03f * cos(phase * 6.28f))
+                    w * (0.14f + 0.04f * sin(phase * 6.28f)),
+                    h * (0.74f + 0.03f * cos(phase * 6.28f))
                 ),
-                radius = w * 0.22f * breathe,
-                tint = primary,
+                radius = w * 0.16f * breathe,
+                tint = BubbleGlass.bubblePeach,
                 alpha = baseAlpha
             )
             drawGlassBubble(
                 center = Offset(
-                    w * (0.82f - 0.05f * cos(phase * 6.28f)),
-                    h * (0.68f + 0.04f * sin(phase * 6.28f))
+                    w * (0.38f - 0.03f * cos(phase * 6.28f)),
+                    h * (0.82f + 0.02f * sin(phase * 6.28f))
                 ),
-                radius = w * 0.18f * breathe,
-                tint = secondary,
-                alpha = baseAlpha
+                radius = w * 0.12f * breathe,
+                tint = BubbleGlass.bubbleMagenta,
+                alpha = baseAlpha * 0.85f
             )
         }
         content()
@@ -150,9 +233,9 @@ private fun DrawScope.drawGlassBubble(
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.55f * alpha),
-                tint.copy(alpha = 0.22f * alpha),
-                tint.copy(alpha = 0.06f * alpha),
+                Color.White.copy(alpha = 0.50f * alpha),
+                tint.copy(alpha = tint.alpha.coerceIn(0f, 1f) * alpha),
+                tint.copy(alpha = tint.alpha * 0.35f * alpha),
                 Color.Transparent
             ),
             center = center - Offset(radius * 0.22f, radius * 0.28f),
@@ -162,13 +245,8 @@ private fun DrawScope.drawGlassBubble(
         center = center
     )
     drawCircle(
-        color = Color.White.copy(alpha = 0.42f * alpha),
-        radius = radius * 0.18f,
-        center = center - Offset(radius * 0.32f, radius * 0.36f)
-    )
-    drawCircle(
-        color = Color.White.copy(alpha = 0.12f * alpha),
-        radius = radius * 0.55f,
-        center = center + Offset(radius * 0.08f, radius * 0.12f)
+        color = Color.White.copy(alpha = 0.38f * alpha),
+        radius = radius * 0.16f,
+        center = center - Offset(radius * 0.30f, radius * 0.34f)
     )
 }

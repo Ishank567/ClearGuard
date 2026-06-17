@@ -21,20 +21,31 @@ object BubbleGlass {
     val pillRadius = 999.dp
     val navRadius = 28.dp
 
-    val surfaceTop = Color(0xE6FFFFFF)      // ~90% white
-    val surfaceBottom = Color(0xB8FFFFFF)     // ~72% white
+    val surfaceTop = Color(0xE8FFF7ED)      // warm frosted white
+    val surfaceBottom = Color(0xB8FFFBEB)     // peach-tinted glass
     val borderHighlight = Color(0xCCFFFFFF)
-    val borderShadow = Color(0x330F766E)
-    val innerGlow = Color(0x1A0F766E)
-    val shadowColor = Color(0x1A0F172A)
+    val borderShadow = Color(0x33C2410C)
+    val innerGlow = Color(0x1AFB923C)
+    val shadowColor = Color(0x26451A03)
 
-    val bgTop = Color(0xFFE8F4F8)
-    val bgMid = Color(0xFFF0F9FF)
-    val bgBottom = Color(0xFFEFF6FF)
+    // Sunset sky gradient — twilight lavender top → coral mid → golden horizon
+    val skyTop = Color(0xFFC4B5FD)       // soft periwinkle
+    val skyUpper = Color(0xFFF9A8D4)     // pink blush
+    val skyMid = Color(0xFFFB923C)       // warm orange
+    val skyLower = Color(0xFFFDBA74)     // peach amber
+    val skyBottom = Color(0xFFFED7AA)    // golden haze
+    val sunCore = Color(0xFFFEF08A)      // pale gold
+    val sunGlow = Color(0xFFFB923C)      // orange halo
+    val sunHaze = Color(0xFFFECACA)      // rose mist
 
-    val bubbleTeal = Color(0x400F766E)
-    val bubbleBlue = Color(0x351E40AF)
-    val bubbleMint = Color(0x45CCFBF1)
+    val bgTop = skyTop
+    val bgMid = skyMid
+    val bgBottom = skyBottom
+
+    val bubbleCoral = Color(0x55FB7185)
+    val bubblePeach = Color(0x50FDBA74)
+    val bubbleMagenta = Color(0x45F472B6)
+    val bubbleGold = Color(0x48FDE68A)
     val bubbleWhite = Color(0x55FFFFFF)
 
     @Composable
@@ -57,11 +68,19 @@ object BubbleGlass {
             )
         )
 
-    @Composable
-    fun backgroundBrush(): Brush =
+    fun sunsetSkyBrush(): Brush =
         Brush.verticalGradient(
-            colors = listOf(bgTop, bgMid, bgBottom)
+            colorStops = arrayOf(
+                0.00f to skyTop,
+                0.22f to skyUpper,
+                0.48f to skyMid,
+                0.72f to skyLower,
+                1.00f to skyBottom
+            )
         )
+
+    @Composable
+    fun backgroundBrush(): Brush = sunsetSkyBrush()
 
     @Composable
     fun buttonBrush(accent: Color = MaterialTheme.colorScheme.primary): Brush =

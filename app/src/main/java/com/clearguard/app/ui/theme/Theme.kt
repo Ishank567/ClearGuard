@@ -11,26 +11,28 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// Bubble-glass light theme — airy gradient backdrop, frosted translucent surfaces.
+// Sunset bubble-glass theme — golden-hour backdrop, warm frosted surfaces.
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF0F766E),
+    primary = Color(0xFFC2410C),           // burnt orange
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFCCFBF1),
-    onPrimaryContainer = Color(0xFF00201C),
-    secondary = Color(0xFF1E40AF),
+    primaryContainer = Color(0xFFFFEDD5),
+    onPrimaryContainer = Color(0xFF431407),
+    secondary = Color(0xFFBE185D),         // sunset rose
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFDBEAFE),
-    onSecondaryContainer = Color(0xFF001D36),
-    tertiary = Color(0xFF0891B2),
+    secondaryContainer = Color(0xFFFCE7F3),
+    onSecondaryContainer = Color(0xFF500724),
+    tertiary = Color(0xFFD97706),          // amber gold
     onTertiary = Color.White,
-    background = BubbleGlass.bgMid,
-    onBackground = Color(0xFF0F172A),
+    tertiaryContainer = Color(0xFFFEF3C7),
+    onTertiaryContainer = Color(0xFF451A03),
+    background = BubbleGlass.skyMid,
+    onBackground = Color(0xFF431407),
     surface = BubbleGlass.surfaceTop,
-    onSurface = Color(0xFF0F172A),
-    surfaceVariant = Color(0xCCFFFFFF),
-    onSurfaceVariant = Color(0xFF475569),
+    onSurface = Color(0xFF431407),
+    surfaceVariant = Color(0xCCFFF7ED),
+    onSurfaceVariant = Color(0xFF78350F),
     outline = Color(0x66FFFFFF),
-    outlineVariant = Color(0x330F766E),
+    outlineVariant = Color(0x33C2410C),
     error = Color(0xFFDC2626),
     onError = Color.White
 )
