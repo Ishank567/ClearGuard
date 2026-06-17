@@ -17,6 +17,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -347,6 +348,11 @@ fun ClearGuardApp(sharedScamText: String? = null) {
             ) {
                 AppScreen.entries.forEach { screen ->
                     val selected = currentScreen == screen
+                    val iconScale by animateFloatAsState(
+                        targetValue = if (selected) 1.14f else 1f,
+                        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
+                        label = "navIconScale"
+                    )
                     NavigationBarItem(
                         selected = selected,
                         onClick = { currentScreen = screen },
@@ -354,7 +360,12 @@ fun ClearGuardApp(sharedScamText: String? = null) {
                             Icon(
                                 screen.icon,
                                 contentDescription = screen.title,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .graphicsLayer {
+                                        scaleX = iconScale
+                                        scaleY = iconScale
+                                    }
                             )
                         },
                         label = {

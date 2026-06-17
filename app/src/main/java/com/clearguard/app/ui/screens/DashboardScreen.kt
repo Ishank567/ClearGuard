@@ -14,7 +14,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -123,14 +131,19 @@ fun DashboardScreen(
         }
     )
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(28.dp)
+    ShieldMeshBackground(
+        modifier = Modifier.fillMaxSize(),
+        active = isProtected
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(28.dp)
+        ) {
         // ========== HERO: Status + Primary Action ==========
+        StaggeredEntrance(index = 0) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -151,13 +164,7 @@ fun DashboardScreen(
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            // Big, calm status
-            Text(
-                text = if (isProtected) "Protected" else "Protection Paused",
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (isProtected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            ProtectionStatusPulse(isProtected = isProtected)
 
             Text(
                 text = if (isProtected) {
@@ -191,8 +198,10 @@ fun DashboardScreen(
                 )
             }
         }
+        }
 
         // ========== STATISTICS ==========
+        StaggeredEntrance(index = 1) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AppSectionHeader("Statistics")
 
@@ -231,8 +240,10 @@ fun DashboardScreen(
                 )
             }
         }
+        }
 
         // ========== ACTIVE SHIELDS (beautiful 2-col grid) ==========
+        StaggeredEntrance(index = 2) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AppSectionHeader("Active Shields")
 
@@ -257,8 +268,10 @@ fun DashboardScreen(
                 }
             }
         }
+        }
 
         // ========== PROTECTION MODES ==========
+        StaggeredEntrance(index = 3) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AppSectionHeader("Protection Mode")
 
@@ -306,8 +319,10 @@ fun DashboardScreen(
                 modifier = Modifier.padding(start = 4.dp, top = 4.dp)
             )
         }
+        }
 
         // ========== SYSTEM STATUS ==========
+        StaggeredEntrance(index = 4) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AppSectionHeader("System")
 
@@ -326,6 +341,8 @@ fun DashboardScreen(
                 }
             }
         }
+        }
+        }
     }
 }
 
@@ -337,6 +354,13 @@ private fun StatItem(
     value: String,
     icon: ImageVector
 ) {
+    val pulse = rememberInfiniteTransition(label = "statIcon")
+    val iconScale by pulse.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "statScale"
+    )
     GlassCard(modifier = modifier) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -346,7 +370,12 @@ private fun StatItem(
                 icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier
+                    .size(22.dp)
+                    .graphicsLayer {
+                        scaleX = iconScale
+                        scaleY = iconScale
+                    }
             )
             Spacer(Modifier.height(12.dp))
             Text(

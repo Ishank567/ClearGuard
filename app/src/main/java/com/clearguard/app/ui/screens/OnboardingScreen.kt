@@ -12,7 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import com.clearguard.app.ui.components.AnimatedFeatureIcon
+import com.clearguard.app.ui.components.AnimatedPageIndicator
 import com.clearguard.app.ui.components.AnimatedShieldLogo
+import com.clearguard.app.ui.components.ShieldMeshBackground
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +60,7 @@ fun OnboardingScreen(onComplete: (startProtection: Boolean) -> Unit) {
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val coroutineScope = rememberCoroutineScope()
 
+    ShieldMeshBackground(modifier = Modifier.fillMaxSize(), active = true) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -97,13 +101,10 @@ fun OnboardingScreen(onComplete: (startProtection: Boolean) -> Unit) {
                         modifier = Modifier.padding(bottom = 24.dp)
                     )
                 } else {
-                    Icon(
-                        imageVector = item.icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .size(72.dp)
-                            .padding(bottom = 32.dp)
+                    AnimatedFeatureIcon(
+                        icon = item.icon,
+                        modifier = Modifier.padding(bottom = 24.dp),
+                        size = 96.dp
                     )
                 }
 
@@ -156,26 +157,10 @@ fun OnboardingScreen(onComplete: (startProtection: Boolean) -> Unit) {
                 Spacer(Modifier.width(64.dp))
             }
 
-            // Page dots
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                repeat(pages.size) { index ->
-                    val isSelected = pagerState.currentPage == index
-                    Box(
-                        modifier = Modifier
-                            .size(if (isSelected) 10.dp else 8.dp)
-                            .padding(1.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = if (isSelected)
-                                MaterialTheme.colorScheme.primary
-                            else
-                                MaterialTheme.colorScheme.outlineVariant,
-                            modifier = Modifier.fillMaxSize()
-                        ) {}
-                    }
-                }
-            }
+            AnimatedPageIndicator(
+                pageCount = pages.size,
+                currentPage = pagerState.currentPage
+            )
 
             if (pagerState.currentPage < pages.size - 1) {
                 Button(
@@ -216,5 +201,6 @@ fun OnboardingScreen(onComplete: (startProtection: Boolean) -> Unit) {
                 )
             }
         }
+    }
     }
 }
