@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -82,6 +83,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
+private data class PrivacyTabItem(val title: String, val icon: ImageVector)
+
+private val privacyTabs = listOf(
+    PrivacyTabItem("Live", Icons.Default.Radar),
+    PrivacyTabItem("Stats", Icons.Default.BarChart),
+    PrivacyTabItem("Apps", Icons.Default.Apps),
+    PrivacyTabItem("Scan", Icons.Default.DocumentScanner)
+)
+
 @Composable
 fun PrivacyScreen(
     blockedTotal: Long,
@@ -97,109 +107,180 @@ fun PrivacyScreen(
     initialScanText: String? = null
 ) {
     var selectedTab by remember { mutableStateOf(if (initialScanText != null) 3 else 0) }
-    val tabs = listOf("Pro Console", "Analytics", "App Audit", "Scanner")
+    val animationsEnabled = rememberAnimationsEnabled()
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Modern M3 tabs - clean, minimal, classy (refined from old custom frosted slider)
-        GlassCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            cornerRadius = 16.dp,
-        ) {
-            BoxWithConstraints(
+    ShieldMeshBackground(
+        modifier = Modifier.fillMaxSize(),
+        active = true,
+        animate = animationsEnabled
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(4.dp)
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
-                val tabWidth = maxWidth / tabs.size
-                val animatedTabOffset by animateDpAsState(
-                    targetValue = tabWidth * selectedTab,
-                    animationSpec = spring(dampingRatio = 0.76f, stiffness = 380f),
-                    label = "tabSlide"
+                Text(
+                    text = "Privacy Center",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-
-                // Sliding capsule indicator
-                Box(
-                    modifier = Modifier
-                        .offset(x = animatedTabOffset)
-                        .width(tabWidth)
-                        .height(38.dp)
-                        .padding(horizontal = 2.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(ClearColors.green.copy(alpha = 0.18f))
-                        .border(
-                            width = 1.dp,
-                            color = ClearColors.green.copy(alpha = 0.35f),
-                            shape = RoundedCornerShape(12.dp)
-                        )
+                Text(
+                    text = "Monitor DNS traffic, audit apps, and scan for scams — fully on-device",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    tabs.forEachIndexed { index, title ->
-                        val selected = selectedTab == index
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(38.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { selectedTab = index },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = title,
-                                fontSize = 13.sp,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (selected) ClearColors.green else ClearColors.text
-                            )
-                        }
-                    }
+            PrivacyTabBar(
+                tabs = privacyTabs,
+                selectedIndex = selectedTab,
+                onSelect = { selectedTab = it },
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            AnimatedContent(
+                targetState = selectedTab,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                transitionSpec = {
+                    (fadeIn(tween(220)) +
+                        slideInHorizontally(tween(220)) { if (targetState > initialState) it / 5 else -it / 5 }) togetherWith
+                        (fadeOut(tween(180)) +
+                            slideOutHorizontally(tween(180)) { if (targetState > initialState) -it / 5 else it / 5 })
+                },
+                label = "privacyTabContent"
+            ) { tab ->
+                when (tab) {
+                    0 -> LiveMonitorScreen(
+                        cacheHits = cacheHits,
+                        upstreamQueries = upstreamQueries,
+                        upstreamAverageLatencyMs = upstreamAverageLatencyMs,
+                        dohEnabled = dohEnabled,
+                        dohQueries = dohQueries
+                    )
+                    1 -> AnalyticsTab(
+                        blockedTotal = blockedTotal,
+                        allowedTotal = allowedTotal,
+                        blockedToday = blockedToday,
+                        cacheHits = cacheHits,
+                        upstreamQueries = upstreamQueries,
+                        upstreamAverageLatencyMs = upstreamAverageLatencyMs,
+                        scamBlocked = scamBlocked,
+                        scamShieldEnabled = scamShieldEnabled,
+                        dohEnabled = dohEnabled,
+                        dohQueries = dohQueries
+                    )
+                    2 -> AppAuditTab()
+                    3 -> ScamScreenshotScanner(initialText = initialScanText)
                 }
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(6.dp))
+@Composable
+private fun PrivacyTabBar(
+    tabs: List<PrivacyTabItem>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        tabs.forEachIndexed { index, tab ->
+            val selected = selectedIndex == index
+            FilterChip(
+                selected = selected,
+                onClick = { onSelect(index) },
+                label = {
+                    Text(
+                        tab.title,
+                        fontSize = 12.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        tab.icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                modifier = Modifier.weight(1f),
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = selected,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant,
+                    selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                )
+            )
+        }
+    }
+}
 
-        AnimatedContent(
-            targetState = selectedTab,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            transitionSpec = {
-                (fadeIn(tween(200)) +
-                    slideInHorizontally(tween(200)) { if (targetState > initialState) it / 4 else -it / 4 }) togetherWith
-                    (fadeOut(tween(200)) +
-                        slideOutHorizontally(tween(200)) { if (targetState > initialState) -it / 4 else it / 4 })
-            },
-            label = "privacyTabContent"
-        ) { tab ->
-            when (tab) {
-                0 -> LiveMonitorScreen(
-                    cacheHits = cacheHits,
-                    upstreamQueries = upstreamQueries,
-                    upstreamAverageLatencyMs = upstreamAverageLatencyMs,
-                    dohEnabled = dohEnabled,
-                    dohQueries = dohQueries
+@Composable
+private fun PrivacyCardHeader(
+    title: String,
+    subtitle: String? = null,
+    icon: ImageVector,
+    trailing: @Composable (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .size(20.dp)
                 )
-                1 -> AnalyticsTab(
-                    blockedTotal = blockedTotal,
-                    allowedTotal = allowedTotal,
-                    blockedToday = blockedToday,
-                    cacheHits = cacheHits,
-                    upstreamQueries = upstreamQueries,
-                    upstreamAverageLatencyMs = upstreamAverageLatencyMs,
-                    scamBlocked = scamBlocked,
-                    scamShieldEnabled = scamShieldEnabled,
-                    dohEnabled = dohEnabled,
-                    dohQueries = dohQueries
+            }
+            Column {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                2 -> AppAuditTab()
-                3 -> ScamScreenshotScanner(initialText = initialScanText)
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
+        trailing?.invoke()
     }
 }
 
@@ -471,75 +552,72 @@ private fun ProConsoleHeader(
     blockedCount: Int,
     threatCount: Int
 ) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 22.dp,
-        elevation = 12.dp
-    ) {
+    val statusColor = if (isProtected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+
+    GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 20.dp, elevation = 2.dp) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(18.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "Advanced Pro Console",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ClearColors.text
-                    )
-                    Text(
-                        text = if (isProtected) "DNS tunnel online" else "DNS tunnel paused",
-                        fontSize = 12.sp,
-                        color = if (isProtected) ClearColors.green else ClearColors.muted
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background((if (isProtected) ClearColors.green else ClearColors.danger).copy(alpha = 0.14f))
-                        .border(
-                            width = 1.dp,
-                            color = (if (isProtected) ClearColors.green else ClearColors.danger).copy(alpha = 0.32f),
-                            shape = RoundedCornerShape(999.dp)
-                        )
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+            PrivacyCardHeader(
+                title = "Live Monitor",
+                subtitle = if (isProtected) "DNS filtering active" else "Protection paused",
+                icon = Icons.Default.Radar,
+                trailing = {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = statusColor.copy(alpha = 0.12f)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(if (isProtected) ClearColors.green else ClearColors.danger)
-                        )
-                        Text(
-                            text = if (isProtected) "LIVE" else "IDLE",
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isProtected) ClearColors.green else ClearColors.danger
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(statusColor)
+                            )
+                            Text(
+                                text = if (isProtected) "Active" else "Idle",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = statusColor
+                            )
+                        }
                     }
                 }
-            }
+            )
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                ProMetricTile("QUERIES", queryCount.toString(), ClearColors.blue, Modifier.weight(1f))
-                ProMetricTile("BLOCKED", blockedCount.toString(), ClearColors.danger, Modifier.weight(1f))
-                ProMetricTile("THREATS", threatCount.toString(), ClearColors.warning, Modifier.weight(1f))
+                ProMetricTile(
+                    label = "Queries",
+                    value = queryCount.toString(),
+                    icon = Icons.Default.QueryStats,
+                    accent = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                ProMetricTile(
+                    label = "Blocked",
+                    value = blockedCount.toString(),
+                    icon = Icons.Default.Block,
+                    accent = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f)
+                )
+                ProMetricTile(
+                    label = "Threats",
+                    value = threatCount.toString(),
+                    icon = Icons.Default.Warning,
+                    accent = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -549,31 +627,37 @@ private fun ProConsoleHeader(
 private fun ProMetricTile(
     label: String,
     value: String,
+    icon: ImageVector,
     accent: Color,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.Black.copy(alpha = 0.22f))
-            .border(1.dp, accent.copy(alpha = 0.20f), RoundedCornerShape(14.dp))
-            .padding(horizontal = 10.dp, vertical = 9.dp)
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
     ) {
-        Text(
-            text = value,
-            fontSize = 20.sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            color = accent
-        )
-        Text(
-            text = label,
-            fontSize = 9.sp,
-            fontFamily = FontFamily.Monospace,
-            color = ClearColors.muted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -598,41 +682,30 @@ private fun DnsMonitorCard(
         else -> "Classic UDP"
     }
 
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 22.dp,
-        elevation = 10.dp
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Dns, contentDescription = null, tint = ClearColors.blue, modifier = Modifier.size(20.dp))
-                    Text("DNS Monitor", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
-                }
-                Text(routeLabel, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = if (isProtected) ClearColors.green else ClearColors.muted)
-            }
+    GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 20.dp, elevation = 2.dp) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            PrivacyCardHeader(
+                title = "DNS Monitor",
+                subtitle = routeLabel,
+                icon = Icons.Default.Dns
+            )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color.Black.copy(alpha = 0.24f))
-                    .border(1.dp, ClearColors.border.copy(alpha = 0.20f), RoundedCornerShape(14.dp))
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                DnsMonitorRow("LOCAL VPN", if (isProtected) "10.64.0.1 / fd00::1" else "offline", if (isProtected) ClearColors.green else ClearColors.muted)
-                DnsMonitorRow("UPSTREAM", if (dohEnabled) "DoH endpoint" else upstreamDns, if (dohEnabled) ClearColors.blue else ClearColors.text)
-                DnsMonitorRow("LATENCY", if (upstreamAverageLatencyMs > 0f) "${upstreamAverageLatencyMs.toInt()} ms avg" else "learning", ClearColors.warning)
-                DnsMonitorRow("CACHE", "$cacheRate% hit rate / $sessionCacheHits session hits", ClearColors.green)
-                DnsMonitorRow("SESSION", "$sessionAllowed allowed / $sessionBlocked blocked", if (sessionBlocked > 0) ClearColors.danger else ClearColors.blue)
-                DnsMonitorRow("DOH QUERIES", dohQueries.toString(), if (dohEnabled) ClearColors.blue else ClearColors.muted)
+                DnsMonitorRow("Local VPN", if (isProtected) "10.64.0.1 / fd00::1" else "Offline", if (isProtected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+                DnsMonitorRow("Upstream", if (dohEnabled) "DoH endpoint" else upstreamDns, if (dohEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                DnsMonitorRow("Latency", if (upstreamAverageLatencyMs > 0f) "${upstreamAverageLatencyMs.toInt()} ms avg" else "Learning…", MaterialTheme.colorScheme.tertiary)
+                DnsMonitorRow("Cache", "$cacheRate% hit rate · $sessionCacheHits session hits", MaterialTheme.colorScheme.primary)
+                DnsMonitorRow("Session", "$sessionAllowed allowed · $sessionBlocked blocked", if (sessionBlocked > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                DnsMonitorRow("DoH queries", dohQueries.toString(), if (dohEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -645,13 +718,16 @@ private fun DnsMonitorRow(label: String, value: String, color: Color) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = ClearColors.muted)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Text(
             value,
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.labelMedium,
             color = color,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -672,31 +748,24 @@ private fun NetworkGraphCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(286.dp),
-        cornerRadius = 22.dp,
-        elevation = 10.dp
+        cornerRadius = 20.dp,
+        elevation = 2.dp
     ) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.AccountTree, contentDescription = null, tint = ClearColors.green, modifier = Modifier.size(20.dp))
-                    Text("Network Graph", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
-                }
-                Text("${graphQueries.size} edges", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = ClearColors.muted)
-            }
+        Column(modifier = Modifier.fillMaxSize().padding(18.dp)) {
+            PrivacyCardHeader(
+                title = "Connection Map",
+                subtitle = "${graphQueries.size} recent connections",
+                icon = Icons.Default.AccountTree
+            )
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color.Black.copy(alpha = 0.24f))
-                    .border(1.dp, ClearColors.border.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
             ) {
                 if (graphQueries.isEmpty()) {
                     EmptyProConsoleState(isProtected = isProtected, modifier = Modifier.align(Alignment.Center))
@@ -816,32 +885,21 @@ private fun TerminalLogsCard(
     tempAllowKeys: Set<String>,
     onSelectQuery: (ClearGuardVpnService.BlockedQuery) -> Unit
 ) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 22.dp,
-        elevation = 10.dp
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Terminal, contentDescription = null, tint = ClearColors.green, modifier = Modifier.size(20.dp))
-                    Text("Terminal Logs", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.text)
-                }
-                Text("memory only", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = ClearColors.muted)
-            }
+    GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 20.dp, elevation = 2.dp) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            PrivacyCardHeader(
+                title = "Recent Activity",
+                subtitle = "Last 24 queries · on-device only",
+                icon = Icons.Default.History
+            )
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color.Black.copy(alpha = 0.36f))
-                    .border(1.dp, ClearColors.green.copy(alpha = 0.16f), RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
                     .padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -871,127 +929,109 @@ private fun TerminalLogRow(
 ) {
     val accent = queryAccent(query)
     val status = queryStatus(query)
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(accent.copy(alpha = 0.08f))
-            .border(1.dp, accent.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(9.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
     ) {
-        Text(
-            text = formatTime(query.timeMillis),
-            fontSize = 10.sp,
-            fontFamily = FontFamily.Monospace,
-            color = ClearColors.muted,
-            modifier = Modifier.width(56.dp)
-        )
-        Box(
-            modifier = Modifier
-                .width(72.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .background(accent.copy(alpha = 0.16f))
-                .border(1.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(7.dp))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = status,
-                fontSize = 9.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                color = accent,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.width(52.dp)) {
                 Text(
-                    text = query.domain,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
+                    text = formatTime(query.timeMillis),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = relativeLogTime(nowMillis - query.timeMillis),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = accent.copy(alpha = 0.14f)
+            ) {
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = ClearColors.text,
+                    color = accent,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
-                if (temporarilyAllowed) {
-                    Spacer(Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(ClearColors.green.copy(alpha = 0.16f))
-                            .border(1.dp, ClearColors.green.copy(alpha = 0.30f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "ALLOWED",
-                            fontSize = 8.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            color = ClearColors.green,
-                            maxLines = 1
-                        )
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = query.domain,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (temporarilyAllowed) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "Allowed",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
+                Text(
+                    text = "${cleanAppName(query)} · ${query.reason}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-            Text(
-                text = "${relativeLogTime(nowMillis - query.timeMillis)} | ${cleanAppName(query)} | ${query.reason}",
-                fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace,
-                color = ClearColors.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }
 
 @Composable
 private fun EmptyProConsoleState(isProtected: Boolean, modifier: Modifier = Modifier) {
+    val tint = if (isProtected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
     Column(
-        modifier = modifier,
+        modifier = modifier.padding(vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val infiniteTransition = rememberInfiniteTransition(label = "proEmptyPulse")
-        val pulseScale by infiniteTransition.animateFloat(
-            initialValue = 0.92f,
-            targetValue = 1.08f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1800, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "proEmptyScale"
-        )
-        Box(contentAlignment = Alignment.Center) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .graphicsLayer {
-                        scaleX = pulseScale
-                        scaleY = pulseScale
-                    }
-                    .clip(CircleShape)
-                    .background((if (isProtected) ClearColors.green else ClearColors.muted).copy(alpha = 0.16f))
-            )
+        Surface(
+            shape = CircleShape,
+            color = tint.copy(alpha = 0.12f)
+        ) {
             Icon(
                 imageVector = Icons.Default.Shield,
                 contentDescription = null,
-                tint = if (isProtected) ClearColors.green else ClearColors.muted,
-                modifier = Modifier.size(30.dp)
+                tint = tint,
+                modifier = Modifier
+                    .padding(16.dp)
+                    .size(28.dp)
             )
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
         Text(
-            text = if (isProtected) "awaiting dns events" else "console idle",
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
-            color = ClearColors.muted,
+            text = if (isProtected) "Waiting for DNS activity" else "Start protection to monitor traffic",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
     }
@@ -1665,75 +1705,55 @@ fun AppAuditTab() {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 8.dp)
     ) {
-        // Toggle: Scores vs Tracker Map
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = { selectedAuditTab = 0 },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selectedAuditTab == 0) ClearColors.green.copy(alpha = 0.18f) else Color.Transparent,
-                    contentColor = if (selectedAuditTab == 0) ClearColors.green else ClearColors.text
-                ),
-                modifier = Modifier
-                    .weight(1f)
-                    .border(
-                        width = 1.dp,
-                        color = if (selectedAuditTab == 0) ClearColors.green.copy(alpha = 0.35f) else ClearColors.border.copy(alpha = 0.25f),
-                        shape = RoundedCornerShape(12.dp)
-                    ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Privacy Scores", fontSize = 12.sp)
-            }
+        AppSectionHeader("App Privacy Audit")
 
-            Button(
-                onClick = { selectedAuditTab = 1 },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selectedAuditTab == 1) ClearColors.green.copy(alpha = 0.18f) else Color.Transparent,
-                    contentColor = if (selectedAuditTab == 1) ClearColors.green else ClearColors.text
-                ),
-                modifier = Modifier
-                    .weight(1f)
-                    .border(
-                        width = 1.dp,
-                        color = if (selectedAuditTab == 1) ClearColors.green.copy(alpha = 0.35f) else ClearColors.border.copy(alpha = 0.25f),
-                        shape = RoundedCornerShape(12.dp)
-                    ),
-                shape = RoundedCornerShape(12.dp)
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = selectedAuditTab == 0,
+                onClick = { selectedAuditTab = 0 },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                icon = { Icon(Icons.Default.Leaderboard, contentDescription = null, modifier = Modifier.size(16.dp)) }
             ) {
-                Icon(Icons.Default.Grain, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Text("Scores", fontSize = 12.sp)
+            }
+            SegmentedButton(
+                selected = selectedAuditTab == 1,
+                onClick = { selectedAuditTab = 1 },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                icon = { Icon(Icons.Default.Hub, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            ) {
                 Text("Tracker Map", fontSize = 12.sp)
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         if (selectedAuditTab == 0) {
             // App scores scrollable list
             if (stats.isEmpty()) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column(
-                        modifier = Modifier.padding(24.dp),
+                        modifier = Modifier.padding(28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Icon(
+                            Icons.Default.Apps,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Auditing device apps...",
-                            color = ClearColors.text,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
+                            text = "Auditing your apps",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Privacy scores and tracker counters will populate here as apps make network queries.",
-                            color = ClearColors.muted,
-                            fontSize = 12.sp,
+                            text = "Privacy scores appear here as apps make DNS queries through ShieldDNS.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -1741,34 +1761,39 @@ fun AppAuditTab() {
             } else {
                 stats.forEach { appStat ->
                     val score = calculatePrivacyScore(appStat.blockedQueries, appStat.totalQueries)
+                    val scoreColor = when {
+                        score >= 80 -> MaterialTheme.colorScheme.primary
+                        score >= 50 -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.error
+                    }
                     GlassCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(14.dp),
+                            modifier = Modifier.padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = appStat.appName,
-                                    fontSize = 15.sp,
+                                    style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = ClearColors.text
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "${appStat.blockedQueries} trackers blocked out of ${appStat.totalQueries} queries",
-                                    fontSize = 12.sp,
-                                    color = ClearColors.muted
+                                    text = "${appStat.blockedQueries} trackers blocked · ${appStat.totalQueries} queries",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 if (appStat.trackers.isNotEmpty()) {
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        text = "Top trackers: " + appStat.trackers.keys.take(2).joinToString(", "),
-                                        fontSize = 11.sp,
-                                        color = ClearColors.danger,
+                                        text = "Top: " + appStat.trackers.keys.take(2).joinToString(", "),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
@@ -1776,21 +1801,21 @@ fun AppAuditTab() {
 
                             Spacer(modifier = Modifier.width(12.dp))
 
-                            // Score gauge circle
+                            val trackColor = MaterialTheme.colorScheme.outlineVariant
                             Box(
                                 contentAlignment = Alignment.Center,
-                                modifier = Modifier.size(54.dp)
+                                modifier = Modifier.size(56.dp)
                             ) {
                                 Canvas(modifier = Modifier.fillMaxSize()) {
                                     drawArc(
-                                        color = ClearColors.border.copy(alpha = 0.25f),
+                                        color = trackColor,
                                         startAngle = 0f,
                                         sweepAngle = 360f,
                                         useCenter = false,
                                         style = Stroke(width = 4.dp.toPx())
                                     )
                                     drawArc(
-                                        color = if (score >= 80) ClearColors.green else if (score >= 50) ClearColors.blue else ClearColors.danger,
+                                        color = scoreColor,
                                         startAngle = -90f,
                                         sweepAngle = (score.toFloat() / 100f) * 360f,
                                         useCenter = false,
@@ -1800,14 +1825,14 @@ fun AppAuditTab() {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
                                         text = "$score",
-                                        fontSize = 14.sp,
+                                        style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = ClearColors.text
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
                                         text = "/100",
-                                        fontSize = 8.sp,
-                                        color = ClearColors.muted
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -1816,17 +1841,10 @@ fun AppAuditTab() {
                 }
             }
         } else {
-            // Visual Tracker Map
-            Text(
-                text = "Invisible Tracker Map",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = ClearColors.text
-            )
-            Text(
-                text = "Dynamic on-device graph showing connections from your apps (inner nodes) to tracking companies (outer nodes).",
-                fontSize = 12.sp,
-                color = ClearColors.muted
+            PrivacyCardHeader(
+                title = "Tracker Map",
+                subtitle = "Apps connecting to known tracking companies",
+                icon = Icons.Default.Hub
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -1841,12 +1859,21 @@ fun AppAuditTab() {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "No trackers detected yet",
-                            color = ClearColors.muted,
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.Hub,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                text = "No trackers detected yet",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 } else {
                     TrackerMapCanvas(trackerConnections)
@@ -2049,28 +2076,34 @@ fun ScamScreenshotScanner(initialText: String? = null) {
 
         GlassCard {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text("Scam Screenshot Scanner", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.green)
-                Spacer(Modifier.height(4.dp))
+                PrivacyCardHeader(
+                    title = "Screenshot Scanner",
+                    subtitle = "OCR + Indian Scam Shield on-device",
+                    icon = Icons.Default.ImageSearch
+                )
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    "Upload a screenshot of a suspicious ad, SMS, WhatsApp message or website. On-device OCR + Indian Scam Shield patterns will check for fake reward, KYC, payment, investment, job, customer support, or APK lures.",
-                    fontSize = 13.sp,
-                    color = ClearColors.muted
+                    "Upload a suspicious ad, SMS, WhatsApp message or website screenshot. Checks for fake reward, KYC, payment, investment, job, and APK lures.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(16.dp))
 
-                PrimaryButton(
+                LiquidGlassButton(
                     onClick = {
                         photoPickerLauncher.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    accent = ClearColors.green
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    accent = MaterialTheme.colorScheme.primary
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Image, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Select Screenshot from Gallery")
+                        Text("Select from Gallery", fontWeight = FontWeight.SemiBold)
                     }
                 }
 
@@ -2267,12 +2300,16 @@ fun SmsTextScamScanner(initialText: String? = null) {
 
     GlassCard {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text("SMS / Text Scam Check", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = ClearColors.green)
-            Spacer(Modifier.height(4.dp))
+            PrivacyCardHeader(
+                title = "Text Scam Check",
+                subtitle = "Paste or share suspicious messages",
+                icon = Icons.Default.Sms
+            )
+            Spacer(Modifier.height(12.dp))
             Text(
-                "Paste a suspicious SMS, WhatsApp forward or link — or share it to ShieldDNS from any app. Checks scam UPI links, fake KYC/reward/job/loan lures and high-risk phone numbers, fully on-device.",
-                fontSize = 13.sp,
-                color = ClearColors.muted
+                "Checks UPI links, fake KYC/reward/job lures and high-risk phone numbers — fully on-device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(14.dp))
 
@@ -2282,27 +2319,35 @@ fun SmsTextScamScanner(initialText: String? = null) {
                 modifier = Modifier.fillMaxWidth(),
                 minHeight = 100.dp,
                 placeholder = "Paste the message text here…",
-                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = ClearColors.text)
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             )
             Spacer(Modifier.height(12.dp))
 
-            PrimaryButton(
+            LiquidGlassButton(
                 onClick = analyze,
-                modifier = Modifier.fillMaxWidth(),
-                accent = ClearColors.green
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                accent = MaterialTheme.colorScheme.primary
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (isChecking) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
-                            color = ClearColors.green
+                            color = MaterialTheme.colorScheme.onPrimary
                         )
                     } else {
                         Icon(Icons.Default.Search, contentDescription = null)
                     }
                     Spacer(Modifier.width(8.dp))
-                    Text(if (isChecking) "Analyzing on-device..." else "Check for Scams")
+                    Text(
+                        if (isChecking) "Analyzing…" else "Check for Scams",
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }
